@@ -33,6 +33,8 @@ fun LoginScreen(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val auth = FirebaseAuth.getInstance()
@@ -66,6 +68,109 @@ fun LoginScreen(
             fontWeight = FontWeight.Bold,
             letterSpacing = 4.sp,
             modifier = Modifier.padding(bottom = 64.dp)
+        )
+        
+        OutlinedTextField(
+            value = email,
+            onValueChange = { email = it },
+            label = { Text("Email", color = com.example.ui.theme.GrayMedium) },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedBorderColor = Color.White,
+                unfocusedBorderColor = com.example.ui.theme.GlassBorderLight,
+                cursorColor = Color.White
+            ),
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        OutlinedTextField(
+            value = password,
+            onValueChange = { password = it },
+            label = { Text("Password", color = com.example.ui.theme.GrayMedium) },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedBorderColor = Color.White,
+                unfocusedBorderColor = com.example.ui.theme.GlassBorderLight,
+                cursorColor = Color.White
+            ),
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Button(
+                onClick = {
+                    if (isLoading || email.isBlank() || password.isBlank()) return@Button
+                    coroutineScope.launch {
+                        isLoading = true
+                        errorMessage = null
+                        try {
+                            auth.signInWithEmailAndPassword(email, password).await()
+                            onLoginSuccess()
+                        } catch (e: Exception) {
+                            errorMessage = "Login failed: ${e.message}"
+                        } finally {
+                            isLoading = false
+                        }
+                    }
+                },
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.White,
+                    contentColor = Color.Black
+                ),
+                contentPadding = PaddingValues(vertical = 16.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                } else {
+                    Text("SIGN IN", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
+                }
+            }
+            
+            Button(
+                onClick = {
+                    if (isLoading || email.isBlank() || password.isBlank()) return@Button
+                    coroutineScope.launch {
+                        isLoading = true
+                        errorMessage = null
+                        try {
+                            auth.createUserWithEmailAndPassword(email, password).await()
+                            onLoginSuccess()
+                        } catch (e: Exception) {
+                            errorMessage = "Signup failed: ${e.message}"
+                        } finally {
+                            isLoading = false
+                        }
+                    }
+                },
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = com.example.ui.theme.GlassLight,
+                    contentColor = Color.White
+                ),
+                contentPadding = PaddingValues(vertical = 16.dp),
+                modifier = Modifier.weight(1f).border(1.dp, com.example.ui.theme.GlassBorderLight, RoundedCornerShape(16.dp))
+            ) {
+                Text("SIGN UP", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(32.dp))
+        Text(
+            text = "--- OR ---",
+            color = Color(0xFFA0A0A0),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 32.dp)
         )
 
         Button(

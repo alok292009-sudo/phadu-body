@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -192,15 +193,14 @@ fun HomeScreen(
                 letterSpacing = 2.sp,
                 modifier = Modifier.padding(bottom = 12.dp)
             )
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.padding(bottom = 32.dp)
             ) {
-                items(templates) { template ->
+                templates.forEachIndexed { index, template ->
                     Card(
                         modifier = Modifier
-                            .width(160.dp)
-                            .height(100.dp)
+                            .fillMaxWidth()
                             .clickable {
                                 if (activeWorkout != null) onResumeWorkout() else onStartWorkout(template.id)
                             },
@@ -208,13 +208,38 @@ fun HomeScreen(
                         colors = CardDefaults.cardColors(containerColor = com.example.ui.theme.GlassDark),
                         border = BorderStroke(1.dp, com.example.ui.theme.GlassBorderDark)
                     ) {
-                        Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                            Text(
-                                text = template.name,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 16.sp,
-                                color = Color.White
-                            )
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .background(com.example.ui.theme.GrayDark, shape = RoundedCornerShape(12.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "D${index + 1}",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = Color.White
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column {
+                                Text(
+                                    text = template.name,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 18.sp,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "${template.exercises.size} Exercises",
+                                    color = com.example.ui.theme.GrayMedium,
+                                    fontSize = 12.sp
+                                )
+                            }
                         }
                     }
                 }

@@ -49,10 +49,12 @@ fun ActiveWorkoutScreen(
     var activeWorkout by remember { mutableStateOf<Workout?>(null) }
     var availableExercises by remember { mutableStateOf<List<Exercise>>(emptyList()) }
     var showAddExerciseDialog by remember { mutableStateOf(false) }
+    var prs by remember { mutableStateOf<Map<String, com.example.model.PersonalRecord>>(emptyMap()) }
 
     LaunchedEffect(Unit) {
         launch { repository.getActiveWorkout().collect { activeWorkout = it } }
         launch { repository.getExercises().collect { availableExercises = it } }
+        launch { repository.getPersonalRecords().collect { recs -> prs = recs.associateBy { it.exerciseId } } }
     }
 
     if (activeWorkout == null) {
@@ -104,9 +106,11 @@ fun ActiveWorkoutScreen(
         ) {
             items(activeWorkout!!.loggedExercises, key = { it.exerciseId }) { exercise ->
                 val index = activeWorkout!!.loggedExercises.indexOf(exercise)
+                val pr = prs[exercise.exerciseId]
                 LoggedExerciseCard(
                     modifier = Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null, placementSpec = tween(300)),
                     loggedExercise = exercise,
+                    pr = pr,
                     onUpdate = { updatedExercise ->
                         val updatedList = activeWorkout!!.loggedExercises.toMutableList()
                         updatedList[index] = updatedExercise
@@ -165,6 +169,7 @@ fun ActiveWorkoutScreen(
 fun LoggedExerciseCard(
     modifier: Modifier = Modifier,
     loggedExercise: LoggedExercise,
+    pr: com.example.model.PersonalRecord? = null,
     onUpdate: (LoggedExercise) -> Unit
 ) {
     val uriHandler = LocalUriHandler.current
@@ -205,14 +210,27 @@ fun LoggedExerciseCard(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            "${setIndex + 1}",
+                        Column(
                             modifier = Modifier.weight(0.5f),
-                            textAlign = TextAlign.Center,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
-                            color = Color.White
-                        )
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                "${setIndex + 1}",
+                                textAlign = TextAlign.Center,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                color = Color.White
+                            )
+                            if (pr != null && pr.bestWeight != null && set.weight > pr.bestWeight.value) {
+                                Box(
+                                    modifier = Modifier
+                                        .background(com.example.ui.theme.ErrorColor, RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                                ) {
+                                    Text("PR", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Black)
+                                }
+                            }
+                        }
                         
                         StepperControl(
                             value = set.weight,
