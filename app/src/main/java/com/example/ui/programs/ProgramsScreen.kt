@@ -75,9 +75,12 @@ fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) 
                             if (isLoading) return@TextButton
                             isLoading = true
                             coroutineScope.launch {
+                                if (program!!.weeks.isEmpty()) {
+                                    android.widget.Toast.makeText(context, "Error: No routines found in program", android.widget.Toast.LENGTH_SHORT).show()
+                                }
                                 // Generate templates for the first week to keep it clean
-                                val week1 = program!!.weeks["week1"]
-                                week1?.days?.filter { !it.isRestDay }?.forEach { day ->
+                                val firstWeek = program!!.weeks.values.firstOrNull()
+                                firstWeek?.days?.filter { !it.isRestDay }?.forEach { day ->
                                     val tExercises = day.exercises.mapIndexed { index, ex ->
                                         TemplateExercise(
                                             exerciseId = UUID.randomUUID().toString(),

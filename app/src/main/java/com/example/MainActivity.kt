@@ -9,6 +9,10 @@ import com.example.ui.IronLogApp
 import com.example.ui.theme.MyApplicationTheme
 import com.google.firebase.FirebaseApp
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import android.widget.Toast
+
 class MainActivity : ComponentActivity() {
     
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -25,7 +29,9 @@ class MainActivity : ComponentActivity() {
         
         setContent {
             MyApplicationTheme {
-                IronLogApp(repository = FirebaseIronLogRepository())
+                val context = androidx.compose.ui.platform.LocalContext.current
+                val repo = remember { com.example.data.SharedPrefsIronLogRepository(context) }
+                IronLogApp(repository = repo)
             }
         }
     }
