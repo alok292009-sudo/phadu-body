@@ -28,11 +28,12 @@ import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProgramsScreen(repository: IronLogRepository) {
+fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var program by remember { mutableStateOf<Program?>(null) }
     var isLoading by remember { mutableStateOf(false) }
+    var showConfirmDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         val json = context.assets.open("jeff_nippard.json").bufferedReader().use { it.readText() }
@@ -62,6 +63,53 @@ fun ProgramsScreen(repository: IronLogRepository) {
                 CircularProgressIndicator(color = Color.White)
             }
         } else {
+            if (showConfirmDialog) {
+                AlertDialog(
+                    onDismissRequest = { showConfirmDialog = false },
+                    containerColor = com.example.ui.theme.GlassDark,
+                    title = { Text("Start Program", color = Color.White) },
+                    text = { Text("Do you want to set this program as your main routine?", color = com.example.ui.theme.GrayMedium) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            showConfirmDialog = false
+                            if (isLoading) return@TextButton
+                            isLoading = true
+                            coroutineScope.launch {
+                                // Generate templates for the first week to keep it clean
+                                val week1 = program!!.weeks["week1"]
+                                week1?.days?.filter { !it.isRestDay }?.forEach { day ->
+                                    val tExercises = day.exercises.mapIndexed { index, ex ->
+                                        TemplateExercise(
+                                            exerciseId = UUID.randomUUID().toString(),
+                                            exerciseName = ex.name,
+                                            targetSets = ex.workingSets?.toIntOrNull() ?: 3,
+                                            targetReps = ex.reps?.split("-")?.last()?.toIntOrNull() ?: 10,
+                                            order = index,
+                                            videoUrl = ex.demoLink
+                                        )
+                                    }
+                                    val template = Template(
+                                        id = UUID.randomUUID().toString(),
+                                        name = day.dayName,
+                                        exercises = tExercises
+                                    )
+                                    repository.saveTemplate(template)
+                                }
+                                isLoading = false
+                                onProgramStarted()
+                            }
+                        }) {
+                            Text("Yes", color = Color.White)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showConfirmDialog = false }) {
+                            Text("Cancel", color = com.example.ui.theme.GrayMedium)
+                        }
+                    }
+                )
+            }
+
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
@@ -84,31 +132,7 @@ fun ProgramsScreen(repository: IronLogRepository) {
                             
                             Button(
                                 onClick = {
-                                    if (isLoading) return@Button
-                                    isLoading = true
-                                    coroutineScope.launch {
-                                        // Generate templates for the first week to keep it clean
-                                        val week1 = program!!.weeks["week1"]
-                                        week1?.days?.filter { !it.isRestDay }?.forEach { day ->
-                                            val tExercises = day.exercises.mapIndexed { index, ex ->
-                                                TemplateExercise(
-                                                    exerciseId = UUID.randomUUID().toString(),
-                                                    exerciseName = ex.name,
-                                                    targetSets = ex.workingSets?.toIntOrNull() ?: 3,
-                                                    targetReps = ex.reps?.split("-")?.last()?.toIntOrNull() ?: 10,
-                                                    order = index,
-                                                    videoUrl = ex.demoLink
-                                                )
-                                            }
-                                            val template = Template(
-                                                id = UUID.randomUUID().toString(),
-                                                name = "W1 - ${day.dayName}",
-                                                exercises = tExercises
-                                            )
-                                            repository.saveTemplate(template)
-                                        }
-                                        isLoading = false
-                                    }
+                                    showConfirmDialog = true
                                 },
                                 shape = RoundedCornerShape(16.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),

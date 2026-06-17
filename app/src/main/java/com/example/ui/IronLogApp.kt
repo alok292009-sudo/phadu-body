@@ -28,7 +28,6 @@ import com.example.ui.home.HomeScreen
 import com.example.ui.history.HistoryScreen
 import com.example.ui.login.LoginScreen
 import com.example.ui.progress.ProgressScreen
-import com.example.ui.templates.TemplatesScreen
 import com.example.ui.workout.ActiveWorkoutScreen
 import kotlinx.coroutines.launch
 
@@ -90,7 +89,6 @@ fun MainScreenWrapper(
     
     val items = listOf(
         Triple("home", Icons.Filled.Home, "HOME"),
-        Triple("templates", Icons.AutoMirrored.Filled.List, "TEMPLATES"),
         Triple("programs", Icons.Filled.Star, "PROGRAMS"),
         Triple("progress", Icons.Filled.Timeline, "PROGRESS"),
         Triple("history", Icons.Filled.History, "HISTORY")
@@ -169,16 +167,17 @@ fun MainScreenWrapper(
                     }
                 )
             }
-            composable("templates") {
-                TemplatesScreen(
+            composable("programs") {
+                com.example.ui.programs.ProgramsScreen(
                     repository = repository,
-                    onNewTemplate = {
-                        // TODO
+                    onProgramStarted = {
+                        bottomNavController.navigate("home") {
+                            popUpTo(bottomNavController.graph.startDestinationId) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
                     }
                 )
-            }
-            composable("programs") {
-                com.example.ui.programs.ProgramsScreen(repository = repository)
             }
             composable("progress") {
                 ProgressScreen(repository)

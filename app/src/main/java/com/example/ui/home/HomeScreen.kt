@@ -89,7 +89,7 @@ fun HomeScreen(
 
         if (templates.isNotEmpty()) {
             Text(
-                text = "QUICK START",
+                text = "MAIN ROUTINE",
                 color = com.example.ui.theme.GrayMedium,
                 fontWeight = FontWeight.Bold,
                 fontSize = 12.sp,
