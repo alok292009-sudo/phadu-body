@@ -4,6 +4,7 @@ import com.example.model.Exercise
 import com.example.model.PersonalRecord
 import com.example.model.Template
 import com.example.model.Workout
+import com.example.model.ActiveProgramState
 import kotlinx.coroutines.flow.Flow
 
 interface IronLogRepository {
@@ -23,6 +24,9 @@ interface IronLogRepository {
     
     fun getPersonalRecords(): Flow<List<PersonalRecord>>
     fun getPersonalRecord(exerciseId: String): Flow<PersonalRecord?>
+    
+    fun getActiveProgramState(): Flow<ActiveProgramState?>
+    suspend fun saveActiveProgramState(state: ActiveProgramState?)
     
     suspend fun signOut()
 }

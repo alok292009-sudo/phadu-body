@@ -74,3 +74,12 @@ data class RecordDetail(
     val date: Long = 0L,
     val workoutId: String = ""
 )
+
+@JsonClass(generateAdapter = true)
+data class ActiveProgramState(
+    val programKey: String = "", // e.g. the json filename or programName
+    val currentWeekIndex: Int = 0,
+    val workoutsCompletedThisWeek: Int = 0,
+    val totalWorkoutsThisWeek: Int = 0,
+    val isWeekCompletedMessageShown: Boolean = false
+)

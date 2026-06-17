@@ -19,6 +19,7 @@ class SharedPrefsIronLogRepository(context: Context) : IronLogRepository {
     private val workoutsState = MutableStateFlow<List<Workout>>(emptyList())
     private val exercisesState = MutableStateFlow<List<Exercise>>(emptyList())
     private val prsState = MutableStateFlow<List<PersonalRecord>>(emptyList())
+    private val activeProgramStateFlow = MutableStateFlow<ActiveProgramState?>(null)
 
     init {
         loadData()
@@ -29,17 +30,29 @@ class SharedPrefsIronLogRepository(context: Context) : IronLogRepository {
         val wJson = prefs.getString("workouts", "[]")
         val eJson = prefs.getString("exercises", "[]")
         val pJson = prefs.getString("prs", "[]")
+        val apJson = prefs.getString("active_program", null)
 
         templatesState.value = moshi.adapter<List<Template>>(Types.newParameterizedType(List::class.java, Template::class.java)).fromJson(tJson ?: "[]") ?: emptyList()
         workoutsState.value = moshi.adapter<List<Workout>>(Types.newParameterizedType(List::class.java, Workout::class.java)).fromJson(wJson ?: "[]") ?: emptyList()
         exercisesState.value = moshi.adapter<List<Exercise>>(Types.newParameterizedType(List::class.java, Exercise::class.java)).fromJson(eJson ?: "[]") ?: emptyList()
         prsState.value = moshi.adapter<List<PersonalRecord>>(Types.newParameterizedType(List::class.java, PersonalRecord::class.java)).fromJson(pJson ?: "[]") ?: emptyList()
+        if (apJson != null) {
+            activeProgramStateFlow.value = moshi.adapter(ActiveProgramState::class.java).fromJson(apJson)
+        }
     }
 
     private fun saveTemplates() = prefs.edit().putString("templates", moshi.adapter<List<Template>>(Types.newParameterizedType(List::class.java, Template::class.java)).toJson(templatesState.value)).apply()
     private fun saveWorkouts() = prefs.edit().putString("workouts", moshi.adapter<List<Workout>>(Types.newParameterizedType(List::class.java, Workout::class.java)).toJson(workoutsState.value)).apply()
     private fun saveExercises() = prefs.edit().putString("exercises", moshi.adapter<List<Exercise>>(Types.newParameterizedType(List::class.java, Exercise::class.java)).toJson(exercisesState.value)).apply()
     private fun savePrs() = prefs.edit().putString("prs", moshi.adapter<List<PersonalRecord>>(Types.newParameterizedType(List::class.java, PersonalRecord::class.java)).toJson(prsState.value)).apply()
+    private fun saveActiveProgram() {
+        val state = activeProgramStateFlow.value
+        if (state == null) {
+            prefs.edit().remove("active_program").apply()
+        } else {
+            prefs.edit().putString("active_program", moshi.adapter(ActiveProgramState::class.java).toJson(state)).apply()
+        }
+    }
 
     override fun getExercises(): Flow<List<Exercise>> = exercisesState
     override suspend fun addExercise(exercise: Exercise) {
@@ -109,11 +122,34 @@ class SharedPrefsIronLogRepository(context: Context) : IronLogRepository {
     }
 
     override suspend fun finishWorkout(workout: Workout) {
-        saveWorkout(workout)
+        val completedWorkout = workout.copy(status = "completed")
+        saveWorkout(completedWorkout)
+        
+        // Update active program state if this workout belongs to a template
+        if (workout.templateId != null) {
+            val state = activeProgramStateFlow.value
+            if (state != null) {
+                val newState = state.copy(
+                    workoutsCompletedThisWeek = state.workoutsCompletedThisWeek + 1
+                )
+                if (newState.workoutsCompletedThisWeek >= newState.totalWorkoutsThisWeek) {
+                    saveActiveProgramState(newState.copy(isWeekCompletedMessageShown = false))
+                } else {
+                    saveActiveProgramState(newState)
+                }
+            }
+        }
     }
 
     override fun getPersonalRecords(): Flow<List<PersonalRecord>> = prsState
     override fun getPersonalRecord(exerciseId: String): Flow<PersonalRecord?> = prsState.map { it.find { pr -> pr.exerciseId == exerciseId } }
+    
+    override fun getActiveProgramState(): Flow<ActiveProgramState?> = activeProgramStateFlow
+    
+    override suspend fun saveActiveProgramState(state: ActiveProgramState?) {
+        activeProgramStateFlow.value = state
+        saveActiveProgram()
+    }
     
     override suspend fun signOut() {}
 }

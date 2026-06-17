@@ -225,6 +225,24 @@ class FirebaseIronLogRepository : IronLogRepository {
                     }
                 }
             }
+            
+            // Update active program state
+            if (workout.templateId != null) {
+                val stateDoc = firestore.collection("users").document(uid).collection("settings").document("activeProgramState")
+                val stateSnapshot = try { stateDoc.get().await() } catch(e:Exception) { null }
+                val state = stateSnapshot?.toObject(ActiveProgramState::class.java)
+                if (state != null) {
+                    val newState = state.copy(
+                        workoutsCompletedThisWeek = state.workoutsCompletedThisWeek + 1
+                    )
+                    if (newState.workoutsCompletedThisWeek >= newState.totalWorkoutsThisWeek) {
+                        stateDoc.set(newState.copy(isWeekCompletedMessageShown = false)).await()
+                    } else {
+                        stateDoc.set(newState).await()
+                    }
+                }
+            }
+            
         } catch (e: Exception) {
             Log.e("FirebaseRepo", "Error finishing workout", e)
         }
@@ -259,6 +277,35 @@ class FirebaseIronLogRepository : IronLogRepository {
             }
         }
         awaitClose { listener.remove() }
+    }
+    
+    override fun getActiveProgramState(): Flow<ActiveProgramState?> = callbackFlow {
+        val doc = firestore.collection("users").document(uid).collection("settings").document("activeProgramState")
+        val listener = doc.addSnapshotListener { snapshot, e ->
+            if (e != null) {
+                Log.e("FirebaseRepo", "Listen error", e)
+                return@addSnapshotListener
+            }
+            if (snapshot != null && snapshot.exists()) {
+                trySend(snapshot.toObject(ActiveProgramState::class.java))
+            } else {
+                trySend(null)
+            }
+        }
+        awaitClose { listener.remove() }
+    }
+
+    override suspend fun saveActiveProgramState(state: ActiveProgramState?) {
+        try {
+            val doc = firestore.collection("users").document(uid).collection("settings").document("activeProgramState")
+            if (state == null) {
+                doc.delete().await()
+            } else {
+                doc.set(state).await()
+            }
+        } catch (e: Exception) {
+            Log.e("FirebaseRepo", "Error saving active program state", e)
+        }
     }
 
     override suspend fun signOut() {

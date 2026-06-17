@@ -23,6 +23,7 @@ import com.example.data.IronLogRepository
 import com.example.model.*
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -89,9 +90,14 @@ fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) 
                                         if (program!!.weeks.isEmpty()) {
                                             android.widget.Toast.makeText(context, "Error: No routines found in program", android.widget.Toast.LENGTH_SHORT).show()
                                         }
-                                        // Generate templates for the first week to keep it clean
+                                        // Clear existing templates to start fresh
+                                        repository.getTemplates().firstOrNull()?.forEach { 
+                                           repository.deleteTemplate(it.id)
+                                        }
+
                                         val firstWeek = program!!.weeks.values.firstOrNull()
                                         var templatesAdded = 0
+                                        var totalWorkoutsFirstWeek = 0
                                         firstWeek?.days?.filter { !it.isRestDay }?.forEach { day ->
                                             val tExercises = day.exercises.mapIndexed { index, ex ->
                                                 TemplateExercise(
@@ -110,7 +116,19 @@ fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) 
                                             )
                                             repository.saveTemplate(template)
                                             templatesAdded++
+                                            totalWorkoutsFirstWeek++
                                         }
+
+                                        repository.saveActiveProgramState(
+                                            ActiveProgramState(
+                                                programKey = "jeff_nippard.json",
+                                                currentWeekIndex = 0,
+                                                workoutsCompletedThisWeek = 0,
+                                                totalWorkoutsThisWeek = totalWorkoutsFirstWeek,
+                                                isWeekCompletedMessageShown = false
+                                            )
+                                        )
+
                                         android.widget.Toast.makeText(context, "Added $templatesAdded routines", android.widget.Toast.LENGTH_SHORT).show()
                                         isLoading = false
                                         onProgramStarted()
