@@ -1,11 +1,15 @@
 package com.example.ui.workout
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -98,8 +102,10 @@ fun ActiveWorkoutScreen(
             contentPadding = padding,
             modifier = Modifier.fillMaxSize()
         ) {
-            itemsIndexed(activeWorkout!!.loggedExercises) { index, exercise ->
+            items(activeWorkout!!.loggedExercises, key = { it.exerciseId }) { exercise ->
+                val index = activeWorkout!!.loggedExercises.indexOf(exercise)
                 LoggedExerciseCard(
+                    modifier = Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null, placementSpec = tween(300)),
                     loggedExercise = exercise,
                     onUpdate = { updatedExercise ->
                         val updatedList = activeWorkout!!.loggedExercises.toMutableList()
@@ -157,20 +163,21 @@ fun ActiveWorkoutScreen(
 
 @Composable
 fun LoggedExerciseCard(
+    modifier: Modifier = Modifier,
     loggedExercise: LoggedExercise,
     onUpdate: (LoggedExercise) -> Unit
 ) {
     val uriHandler = LocalUriHandler.current
     
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 12.dp),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = com.example.ui.theme.GlassDark),
         border = BorderStroke(1.dp, com.example.ui.theme.GlassBorderDark)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(16.dp).animateContentSize()) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(text = loggedExercise.exerciseName, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = Color.White)
                 if (loggedExercise.videoUrl != null) {
@@ -190,72 +197,110 @@ fun LoggedExerciseCard(
             Spacer(modifier = Modifier.height(8.dp))
 
             loggedExercise.sets.forEachIndexed { setIndex, set ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "${setIndex + 1}",
-                        modifier = Modifier.weight(0.5f),
-                        textAlign = TextAlign.Center,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = Color.White
-                    )
-                    
-                    StepperControl(
-                        value = set.weight,
-                        step = 2.5,
-                        onValueChange = { newVal ->
-                            val newSets = loggedExercise.sets.toMutableList()
-                            newSets[setIndex] = set.copy(weight = newVal)
-                            onUpdate(loggedExercise.copy(sets = newSets))
-                        },
-                        modifier = Modifier.weight(1.5f)
-                    )
-                    
-                    StepperControl(
-                        value = set.reps.toDouble(),
-                        step = 1.0,
-                        onValueChange = { newVal ->
-                            val newSets = loggedExercise.sets.toMutableList()
-                            newSets[setIndex] = set.copy(reps = newVal.toInt())
-                            onUpdate(loggedExercise.copy(sets = newSets))
-                        },
-                        modifier = Modifier.weight(1.5f)
-                    )
-                    
-                    Box(
+                Column(modifier = Modifier.fillMaxWidth().animateContentSize()) {
+                    Row(
                         modifier = Modifier
-                            .weight(0.5f)
-                            .height(36.dp)
-                            .padding(horizontal = 4.dp)
-                            .background(
-                                color = if (set.completedAt != null) Color.White else Color.Transparent,
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                            .border(
-                                1.dp,
-                                if (set.completedAt != null) Color.Transparent else com.example.ui.theme.GlassBorderLight,
-                                RoundedCornerShape(12.dp)
-                            )
-                            .clickable {
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "${setIndex + 1}",
+                            modifier = Modifier.weight(0.5f),
+                            textAlign = TextAlign.Center,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = Color.White
+                        )
+                        
+                        StepperControl(
+                            value = set.weight,
+                            step = 2.5,
+                            onValueChange = { newVal ->
                                 val newSets = loggedExercise.sets.toMutableList()
-                                newSets[setIndex] = set.copy(
-                                    completedAt = if (set.completedAt == null) System.currentTimeMillis() else null
-                                )
+                                newSets[setIndex] = set.copy(weight = newVal)
                                 onUpdate(loggedExercise.copy(sets = newSets))
                             },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (set.completedAt != null) {
-                            Icon(Icons.Filled.Check, contentDescription = "Done", tint = Color.Black)
-                        } else {
-                            // Empty box
+                            modifier = Modifier.weight(1.5f)
+                        )
+                        
+                        StepperControl(
+                            value = set.reps.toDouble(),
+                            step = 1.0,
+                            onValueChange = { newVal ->
+                                val newSets = loggedExercise.sets.toMutableList()
+                                newSets[setIndex] = set.copy(reps = newVal.toInt())
+                                onUpdate(loggedExercise.copy(sets = newSets))
+                            },
+                            modifier = Modifier.weight(1.5f)
+                        )
+                        
+                        val isDone = set.completedAt != null
+                        val boxColor by animateColorAsState(if (isDone) Color.White else Color.Transparent, animationSpec = tween(300))
+                        val borderColor by animateColorAsState(if (isDone) Color.Transparent else com.example.ui.theme.GlassBorderLight, animationSpec = tween(300))
+                        
+                        Box(
+                            modifier = Modifier
+                                .weight(0.5f)
+                                .height(36.dp)
+                                .padding(horizontal = 4.dp)
+                                .background(
+                                    color = boxColor,
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                                .border(
+                                    1.dp,
+                                    borderColor,
+                                    RoundedCornerShape(12.dp)
+                                )
+                                .clickable {
+                                    val newSets = loggedExercise.sets.toMutableList()
+                                    newSets[setIndex] = set.copy(
+                                        completedAt = if (set.completedAt == null) System.currentTimeMillis() else null
+                                    )
+                                    onUpdate(loggedExercise.copy(sets = newSets))
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isDone) {
+                                Icon(Icons.Filled.Check, contentDescription = "Done", tint = Color.Black)
+                            }
                         }
+                    }
+                    
+                    // RPE Slider
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 32.dp, end = 16.dp, bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "RPE: ${set.rpe ?: "-"}", 
+                            color = com.example.ui.theme.GrayMedium, 
+                            fontSize = 12.sp, 
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Slider(
+                            value = set.rpe ?: 8f,
+                            onValueChange = { newVal ->
+                                val rounded = (Math.round(newVal * 2) / 2.0).toFloat()
+                                val newSets = loggedExercise.sets.toMutableList()
+                                newSets[setIndex] = set.copy(rpe = rounded)
+                                onUpdate(loggedExercise.copy(sets = newSets))
+                            },
+                            valueRange = 1f..10f,
+                            steps = 17,
+                            modifier = Modifier.weight(1f),
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color.White,
+                                activeTrackColor = Color.White,
+                                inactiveTrackColor = com.example.ui.theme.GlassBorderLight
+                            )
+                        )
                     }
                 }
             }

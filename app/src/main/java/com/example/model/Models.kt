@@ -55,7 +55,8 @@ data class WorkoutSet(
     val weight: Double = 0.0,
     val reps: Int = 0,
     val isWarmup: Boolean = false,
-    val completedAt: Long? = null
+    val completedAt: Long? = null,
+    val rpe: Float? = null
 )
 
 @JsonClass(generateAdapter = true)
