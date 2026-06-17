@@ -37,7 +37,7 @@ fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) 
     var showConfirmDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        val json = context.assets.open("jeff_nippard.json").bufferedReader().use { it.readText() }
+        val json = context.assets.open("bodybuilding_program.json").bufferedReader().use { it.readText() }
         val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
         val adapter = moshi.adapter(Program::class.java)
         program = adapter.fromJson(json)
@@ -121,7 +121,7 @@ fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) 
 
                                         repository.saveActiveProgramState(
                                             ActiveProgramState(
-                                                programKey = "jeff_nippard.json",
+                                                programKey = "bodybuilding_program.json",
                                                 currentWeekIndex = 0,
                                                 workoutsCompletedThisWeek = 0,
                                                 totalWorkoutsThisWeek = totalWorkoutsFirstWeek,
@@ -133,7 +133,9 @@ fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) 
                                         isLoading = false
                                         onProgramStarted()
                                     } catch (e: Exception) {
-                                        android.widget.Toast.makeText(context, "Error: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                                        if (e !is kotlin.coroutines.cancellation.CancellationException && e !is kotlinx.coroutines.CancellationException) {
+                                            android.widget.Toast.makeText(context, "Error: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                                        }
                                         isLoading = false
                                     }
                                 }
