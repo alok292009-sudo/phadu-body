@@ -91,9 +91,7 @@ fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) 
                                             android.widget.Toast.makeText(context, "Error: No routines found in program", android.widget.Toast.LENGTH_SHORT).show()
                                         }
                                         // Clear existing templates to start fresh
-                                        repository.getTemplates().firstOrNull()?.forEach { 
-                                           repository.deleteTemplate(it.id)
-                                        }
+                                        repository.clearAllTemplates()
 
                                         val firstWeek = program!!.weeks.values.firstOrNull()
                                         var templatesAdded = 0

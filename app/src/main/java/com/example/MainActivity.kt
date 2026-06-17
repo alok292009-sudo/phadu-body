@@ -30,7 +30,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             MyApplicationTheme {
                 val context = androidx.compose.ui.platform.LocalContext.current
-                val repo = remember { com.example.data.FirebaseIronLogRepository() }
+                val repo = remember { com.example.data.FirebaseIronLogRepository(context) }
                 IronLogApp(repository = repo)
             }
         }

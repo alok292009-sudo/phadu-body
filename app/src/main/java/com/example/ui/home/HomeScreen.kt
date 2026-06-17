@@ -38,6 +38,7 @@ import com.example.model.Program
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import java.util.UUID
+import com.example.ui.theme.bounceClick
 
 @Composable
 fun HomeScreen(
@@ -106,9 +107,7 @@ fun HomeScreen(
                                     
                                     if (program != null && nextWeekIndex < program.weeks.size) {
                                         // Clear current templates
-                                        repository.getTemplates().firstOrNull()?.forEach { 
-                                           repository.deleteTemplate(it.id)
-                                        }
+                                        repository.clearAllTemplates()
                                         
                                         val nextWeek = program.weeks.values.toList()[nextWeekIndex]
                                         var templatesAdded = 0
@@ -187,24 +186,25 @@ fun HomeScreen(
             }
         }
 
-        Button(
-            onClick = {
-                if (activeWorkout != null) onResumeWorkout() else onStartWorkout(null)
-            },
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(64.dp)
-                .padding(bottom = 24.dp)
+                .height(58.dp)
+                .background(Color.White, RoundedCornerShape(16.dp))
+                .bounceClick {
+                    if (activeWorkout != null) onResumeWorkout() else onStartWorkout(null)
+                },
+            contentAlignment = Alignment.Center
         ) {
             Text(
                 text = if (activeWorkout != null) "RESUME WORKOUT" else "START FREE WORKOUT",
+                color = Color.Black,
                 fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp
             )
         }
+        Spacer(modifier = Modifier.height(24.dp))
 
         if (templates.isNotEmpty()) {
             val titleText = if (activeProgramState != null) "WEEK ${activeProgramState!!.currentWeekIndex + 1} ROUTINE" else "MAIN ROUTINE"
@@ -224,11 +224,11 @@ fun HomeScreen(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable {
+                            .bounceClick {
                                 if (activeWorkout != null) onResumeWorkout() else onStartWorkout(template.id)
                             },
                         shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = com.example.ui.theme.GlassDark),
+                        colors = CardDefaults.cardColors(containerColor = com.example.ui.theme.GrayDark), // Solid background for text legibility
                         border = BorderStroke(1.dp, com.example.ui.theme.GlassBorderDark)
                     ) {
                         Row(
@@ -281,7 +281,7 @@ fun HomeScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = com.example.ui.theme.GlassDark),
+                colors = CardDefaults.cardColors(containerColor = com.example.ui.theme.GrayDark), // Solid background for clarity & numbers
                 border = BorderStroke(1.dp, com.example.ui.theme.GlassBorderDark)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {

@@ -31,6 +31,7 @@ class SharedPrefsIronLogRepository(context: Context) : IronLogRepository {
         val eJson = prefs.getString("exercises", "[]")
         val pJson = prefs.getString("prs", "[]")
         val apJson = prefs.getString("active_program", null)
+        val upJson = prefs.getString("user_profile", null)
 
         templatesState.value = moshi.adapter<List<Template>>(Types.newParameterizedType(List::class.java, Template::class.java)).fromJson(tJson ?: "[]") ?: emptyList()
         workoutsState.value = moshi.adapter<List<Workout>>(Types.newParameterizedType(List::class.java, Workout::class.java)).fromJson(wJson ?: "[]") ?: emptyList()
@@ -38,6 +39,9 @@ class SharedPrefsIronLogRepository(context: Context) : IronLogRepository {
         prsState.value = moshi.adapter<List<PersonalRecord>>(Types.newParameterizedType(List::class.java, PersonalRecord::class.java)).fromJson(pJson ?: "[]") ?: emptyList()
         if (apJson != null) {
             activeProgramStateFlow.value = moshi.adapter(ActiveProgramState::class.java).fromJson(apJson)
+        }
+        if (upJson != null) {
+            userProfileState.value = moshi.adapter(UserProfile::class.java).fromJson(upJson)
         }
     }
 
@@ -101,6 +105,11 @@ class SharedPrefsIronLogRepository(context: Context) : IronLogRepository {
         saveTemplates()
     }
 
+    override suspend fun clearAllTemplates() {
+        templatesState.value = emptyList()
+        saveTemplates()
+    }
+
     override fun getWorkouts(): Flow<List<Workout>> = workoutsState
     override fun getActiveWorkout(): Flow<Workout?> = workoutsState.map { it.find { w -> w.status == "in_progress" } }
 
@@ -156,7 +165,7 @@ class SharedPrefsIronLogRepository(context: Context) : IronLogRepository {
     override fun getUserProfile(): Flow<UserProfile?> = userProfileState
     override suspend fun saveUserProfile(profile: UserProfile) {
         userProfileState.value = profile
-        // Persistence not fully implemented locally to keep minimal
+        prefs.edit().putString("user_profile", moshi.adapter(UserProfile::class.java).toJson(profile)).apply()
     }
     
     override suspend fun signOut() {}

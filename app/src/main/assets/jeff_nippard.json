@@ -1,6 +1,62 @@
 {
   "programName": "The Bodybuilding Transformation System - Intermediate-Advanced",
   "author": "Jeff Nippard",
+  "usageNote": "Personal copy for single-user import only - not for redistribution",
+  "programNotes": "IMPORTANT PROGRAM NOTES (READ BEFORE STARTING)\n\n● Perform a full general warm-up and exercise-specific warm-up every workout as outlined below (should only take 5-10 mins max)\n\n● Note that for the first week of the program, most sets are taken to an RPE of ~7-9. This means you will be leaving 1-3 reps in the tank on most exercises. This only lasts for the first week (to serve as a deload/intro week). After the first week, the intensity will increase and you’ll start taking the last set of every exercise to failure.\n\n● All working sets are broken up into Early Sets and Last Sets. The Early Sets are all the sets that come before your Last Set. Usually the Early Sets should be a little bit easier than the later sets (slightly lower RPE) whereas the Last Set is pushed to failure on all exercises (besides intro/deload weeks). See the Bodybuilding Transformation System Guidebook for a full explanation of RPE.\n\n● Each exercise has a clickable link which demonstrates how to perform the exercise. I suggest watching each exercise demo before starting the workout.\n\n● All other aspects of the program, including when to make an exercise substitution and how to progress through the rep ranges given is explained in the Bodybuilding Transformation System Guidebook. Give it a full read before starting your first workout! Let's crush it!!",
+  "warmupProtocol": {
+    "generalWarmup": {
+      "note": "Perform the following general warm-up before every workout (should take 5-10 mins max). \nYou can save time by doing some of the dynamic stretches as you do warm-up sets for the first exercise.",
+      "items": [
+        {
+          "amount": "5-10 minutes",
+          "exercise": "Light cardio on machine on your choice of machine (treadmill, stairmaster, elliptical, bike, etc.)",
+          "demoLink": null
+        },
+        {
+          "amount": "10 reps per side",
+          "exercise": "Arm Swings",
+          "demoLink": "https://youtu.be/tFpwBr_7KPg?si=tFpwBr_7KPg"
+        },
+        {
+          "amount": "10 reps per side",
+          "exercise": "Arm Circles",
+          "demoLink": "https://youtu.be/tFpwBr_7KPg?si=ZBn0o9wo6P78IwIg&t=10"
+        },
+        {
+          "amount": "10 reps per side",
+          "exercise": "Front-to-Back Leg Swings",
+          "demoLink": "https://youtu.be/tFpwBr_7KPg?si=xiy3TjoRiQUvn7qX&t=19"
+        },
+        {
+          "amount": "10 reps per side",
+          "exercise": "Side-to-Side Leg Swings",
+          "demoLink": "https://youtu.be/tFpwBr_7KPg?si=m5M3W6evtbwi9amN&t=28"
+        },
+        {
+          "amount": "15 reps per side",
+          "exercise": "Cable External Rotation (optional)",
+          "demoLink": "https://youtu.be/tFpwBr_7KPg?si=ui18pgNWTE2IrKcu&t=39"
+        }
+      ]
+    },
+    "exerciseSpecificWarmup": {
+      "note": "Perform the following exercise-specific warm-up according to the number of warm-up sets listed in the program",
+      "rules": [
+        {
+          "warmupSetsListed": "1 Warm-Up Set Listed",
+          "instructions": "Use ~60% of target load for target reps"
+        },
+        {
+          "warmupSetsListed": "2 Warm-Up Sets Listed",
+          "instructions": "Set 1: ~50%, Set 2: ~75% of target load"
+        },
+        {
+          "warmupSetsListed": "3 Warm-Up Sets Listed",
+          "instructions": "Set 1: ~45%, Set 2: ~65%, Set 3: ~85% of target load"
+        }
+      ]
+    }
+  },
   "weeks": {
     "week1": {
       "block": "Foundation Block",
@@ -12,45 +68,85 @@
             {
               "name": "45° Incline Barbell Press",
               "demoLink": "https://youtu.be/vqQ9ok0dEgk",
+              "lastSetTechnique": "N/A",
               "warmupSets": "2-3",
               "workingSets": "2",
-              "reps": "6-8"
+              "reps": "6-8",
+              "earlySetRPE": "~6-7",
+              "lastSetRPE": "~7-8",
+              "rest": "3-5 min",
+              "notes": "1 second pause at the bottom of each rep while maintaining tension on the pecs"
             },
             {
               "name": "Cable Crossover Ladder",
               "demoLink": "https://youtu.be/0TP9kVcWGic?si=5lWdSFfUA27mop9-",
+              "lastSetTechnique": "N/A",
+              "warmupSets": "1-2",
               "workingSets": "2",
-              "reps": "8-10"
+              "reps": "8-10",
+              "earlySetRPE": "~7-8",
+              "lastSetRPE": "~8-9",
+              "rest": "1-2 min",
+              "notes": "Do one set with low cable position, one set with medium-height cable position, and one height with a high cable position."
             },
             {
               "name": "Wide-Grip Lat Pulldown",
               "demoLink": "https://youtu.be/IYXRrYXfVLc?si=8eUNzIQ9o7Y-XpSp",
+              "lastSetTechnique": "N/A",
+              "warmupSets": "1-2",
               "workingSets": "2",
-              "reps": "8-10"
+              "reps": "8-10",
+              "earlySetRPE": "~6-7",
+              "lastSetRPE": "~7-8",
+              "rest": "2-3 min",
+              "notes": "1.5x shoulder width overhand grip. Slow 2-3 second negative. Feel your lats pulling apart on the way down."
             },
             {
-              "name": "High-Cable Lateral Raise",
-              "demoLink": "https://youtu.be/MnMux3Wc0Ac?si=diOk1ZKwTwTa4Sx0",
+              "name": "High-Cable Cuffed Lateral Raise",
+              "demoLink": "https://youtu.be/8m2jNHBP580?si=a4KGz2Dm0gRioyBG",
+              "lastSetTechnique": "N/A",
+              "warmupSets": "1-2",
               "workingSets": "2",
-              "reps": "8-10"
+              "reps": "8-10",
+              "earlySetRPE": "~7-8",
+              "lastSetRPE": "~8-9",
+              "rest": "1-2 min",
+              "notes": "Focus on squeezing your lateral delt to move the weight."
             },
             {
               "name": "Smith Machine Row",
               "demoLink": "https://youtu.be/Wmivm40AV3Q?si=pAcxmzGxP16bt5I5",
+              "lastSetTechnique": "N/A",
+              "warmupSets": "1-2",
               "workingSets": "2",
-              "reps": "6-8"
+              "reps": "6-8",
+              "earlySetRPE": "~7-8",
+              "lastSetRPE": "~8-9",
+              "rest": "2-3 min",
+              "notes": "Stand on a bumper plate. Focus on getting a big stretch and touch your stomach/chest on each rep!"
             },
             {
-              "name": "Overhead Cable Triceps Extension",
-              "demoLink": "https://youtu.be/GYoUoVNlbGc?si=mKlJH3mz_e7-RCu0",
+              "name": "Overhead Cable Triceps Extension (Bar)",
+              "demoLink": "https://youtu.be/9_I1PqZAjdA?si=hLmz2aLH05YfsUTF",
+              "lastSetTechnique": "N/A",
+              "warmupSets": "1",
               "workingSets": "2",
-              "reps": "8-10"
+              "reps": "8-10",
+              "earlySetRPE": "~7-8",
+              "lastSetRPE": "~8-9",
+              "rest": "1-2 min",
+              "notes": "Optionally pause for 0.5-1 second in the stretched aspect of each rep"
             },
             {
               "name": "Bayesian Cable Curl",
-              "demoLink": "https://youtu.be/jQ9rkfvAbIc?si=m1Q5OHGTNvhD6TZ9",
+              "demoLink": "https://youtu.be/CWH5J_7kzjM?si=FlPzreLDPHogRxve",
+              "lastSetTechnique": "N/A",
+              "warmupSets": "1",
               "workingSets": "2",
-              "reps": "8-10"
+              "reps": "8-10",
+              "earlySetRPE": "~7-8",
+              "lastSetRPE": "~8-9",
+              "notes": "Continuous tension from behind."
             }
           ]
         },
@@ -61,38 +157,74 @@
             {
               "name": "Seated Leg Curl",
               "demoLink": "https://youtu.be/yv0aAY7M1mk?si=Z1Cx7ih-vWTSTqq-",
+              "lastSetTechnique": "N/A",
+              "warmupSets": "2",
               "workingSets": "2",
-              "reps": "8-10"
+              "reps": "8-10",
+              "earlySetRPE": "~7-8",
+              "lastSetRPE": "~8-9",
+              "rest": "1-2 min",
+              "notes": "Set the machine so that you get the biggest stretch possible at the bottom. Prevent your butt from popping up as you curl."
             },
             {
               "name": "DB Bulgarian Split Squat",
               "demoLink": "https://youtu.be/htDXu61MPio?si=WNsXh0BmNMXONRHP",
+              "lastSetTechnique": "N/A",
+              "warmupSets": "2-4",
               "workingSets": "2",
-              "reps": "6-8"
+              "reps": "6-8",
+              "earlySetRPE": "~6-7",
+              "lastSetRPE": "~7-8",
+              "rest": "3-5 min",
+              "notes": "Drive through your front heel."
             },
             {
               "name": "Barbell RDL",
               "demoLink": "https://youtu.be/3fJwfg51cv0",
+              "lastSetTechnique": "N/A",
+              "warmupSets": "2-4",
               "workingSets": "2",
-              "reps": "6-8"
+              "reps": "6-8",
+              "earlySetRPE": "~6-7",
+              "lastSetRPE": "~7-8",
+              "rest": "2-3 min",
+              "notes": "To keep tension on the hamstrings, stop about 75% of the way to full lockout."
             },
             {
               "name": "Leg Extension",
               "demoLink": "https://youtu.be/uFbNtqP966A?si=3mIG7OVH30gHjNhd",
+              "lastSetTechnique": "N/A",
+              "warmupSets": "1-2",
               "workingSets": "2",
-              "reps": "8-10"
+              "reps": "8-10",
+              "earlySetRPE": "~7-8",
+              "lastSetRPE": "~8-9",
+              "rest": "1-2 min",
+              "notes": "Lean back slightly to maximize stretch."
             },
             {
               "name": "Standing Calf Raise",
               "demoLink": "https://youtu.be/6lR2JdxUh7w?si=Q_4oyceNkI-WarRg",
+              "lastSetTechnique": "N/A",
+              "warmupSets": "1-2",
               "workingSets": "2",
-              "reps": "6-8"
+              "reps": "6-8",
+              "earlySetRPE": "~7-8",
+              "lastSetRPE": "~8-9",
+              "rest": "1-2 min",
+              "notes": "Pause at the bottom."
             },
             {
               "name": "Cable Crunch",
               "demoLink": "https://youtu.be/epBrpaGHMcg?si=FMV9IKBOvBkuUOZM",
+              "lastSetTechnique": "N/A",
+              "warmupSets": "1",
               "workingSets": "2",
-              "reps": "8-10"
+              "reps": "8-10",
+              "earlySetRPE": "~7-8",
+              "lastSetRPE": "~8-9",
+              "rest": "1-2 min",
+              "notes": "Control the negative phase."
             }
           ]
         },
@@ -100,155 +232,29 @@
           "dayName": "Rest Day",
           "isRestDay": true,
           "exercises": []
-        },
+        }
+      ]
+    },
+    "week2": {
+      "block": "Foundation Block",
+      "days": [
         {
-          "dayName": "Pull (Hypertrophy Focus)",
+          "dayName": "Upper (Strength Focus)",
           "isRestDay": false,
           "exercises": [
             {
-              "name": "Neutral-Grip Lat Pulldown",
-              "demoLink": "https://youtu.be/lA4_1F9EAFU?si=5Bh19rDwBplX5QUz",
-              "workingSets": "2",
-              "reps": "8-10"
-            },
-            {
-              "name": "Chest-Supported Machine Row",
-              "demoLink": "https://youtu.be/ijsSiWSzYw0?si=ADBJRkNSajLiVayN",
-              "workingSets": "2",
-              "reps": "8-10"
-            },
-            {
-              "name": "Neutral-Grip Seated Cable Row",
-              "demoLink": "https://youtu.be/hM7XHxQgvLk?si=NSpgHwt_kgLsKPBY",
-              "workingSets": "2",
-              "reps": "10-12"
-            },
-            {
-              "name": "1-Arm 45° Cable Rear Delt Flye",
-              "demoLink": "https://youtu.be/6G5DmVaocGM",
-              "workingSets": "2",
-              "reps": "10-12"
-            },
-            {
-              "name": "Machine Shrug",
-              "demoLink": "https://youtu.be/ua0XuKwKQ9M?si=Y-kGNEq_riqAF2Tn",
-              "workingSets": "2",
-              "reps": "10-12"
-            },
-            {
-              "name": "EZ-Bar Cable Curl",
-              "demoLink": "https://youtu.be/ck1zjNTnFew?si=EgggtiVFxulCoYXU",
-              "workingSets": "2",
-              "reps": "10-12"
-            },
-            {
-              "name": "Machine Preacher Curl",
-              "demoLink": "https://youtu.be/R2iUnBxFtis",
-              "workingSets": "1",
-              "reps": "12-15"
+              "name": "45° Incline Barbell Press",
+              "demoLink": "https://youtu.be/vqQ9ok0dEgk",
+              "lastSetTechnique": "Failure",
+              "warmupSets": "2-3",
+              "workingSets": "3",
+              "reps": "6-8",
+              "earlySetRPE": "~8-9",
+              "lastSetRPE": "10",
+              "rest": "3-5 min",
+              "notes": "Intense sets pushing hard."
             }
           ]
-        },
-        {
-          "dayName": "Push (Hypertrophy Focus)",
-          "isRestDay": false,
-          "exercises": [
-            {
-              "name": "Barbell Bench Press",
-              "demoLink": "https://youtu.be/nQL5ieH39sw?si=RjZSWBZ3CGKg-pax",
-              "workingSets": "2",
-              "reps": "8-10"
-            },
-            {
-              "name": "Machine Shoulder Press",
-              "demoLink": "https://youtu.be/SCQVmN1gYsk?si=Enyh4L6ZDiCc6RyU",
-              "workingSets": "2",
-              "reps": "8-10"
-            },
-            {
-              "name": "Bottom-Half DB Flye",
-              "demoLink": "https://youtu.be/qJzc-iHKGdg?si=GGd61Dr4uoDUI9b6",
-              "workingSets": "2",
-              "reps": "10-12"
-            },
-            {
-              "name": "High-Cable Lateral Raise",
-              "demoLink": "https://youtu.be/MnMux3Wc0Ac?si=diOk1ZKwTwTa4Sx0",
-              "workingSets": "2",
-              "reps": "10-12"
-            },
-            {
-              "name": "Overhead Cable Triceps Extension",
-              "demoLink": "https://youtu.be/9_I1PqZAjdA?si=hLmz2aLH05YfsUTF",
-              "workingSets": "2",
-              "reps": "10-12"
-            },
-            {
-              "name": "Cable Triceps Kickback",
-              "demoLink": "https://youtu.be/oRxTKRtP8RE?si=S_C_5SZAal_SIFBq",
-              "workingSets": "1",
-              "reps": "12-15"
-            },
-            {
-              "name": "Roman Chair Leg Raise",
-              "demoLink": "https://youtu.be/irOzFVqJ0IE?si=T1jsVXxw_GUhXrPX",
-              "workingSets": "2",
-              "reps": "10-20"
-            }
-          ]
-        },
-        {
-          "dayName": "Legs (Hypertrophy Focus)",
-          "isRestDay": false,
-          "exercises": [
-            {
-              "name": "Leg Press",
-              "demoLink": "https://youtu.be/1yKAQLVV_XI?si=G0wEZEbz8Kq9vFnF",
-              "workingSets": "2",
-              "reps": "8-10"
-            },
-            {
-              "name": "Seated Leg Curl",
-              "demoLink": "https://youtu.be/yv0aAY7M1mk?si=Z1Cx7ih-vWTSTqq-",
-              "workingSets": "2",
-              "reps": "10-12"
-            },
-            {
-              "name": "DB Bulgarian Split Squat",
-              "demoLink": "https://youtu.be/htDXu61MPio?si=WNsXh0BmNMXONRHP",
-              "workingSets": "2",
-              "reps": "8-10"
-            },
-            {
-              "name": "Leg Extension",
-              "demoLink": "https://youtu.be/uFbNtqP966A?si=3mIG7OVH30gHjNhd",
-              "workingSets": "2",
-              "reps": "10-12"
-            },
-            {
-              "name": "Machine Hip Adduction",
-              "demoLink": "https://youtu.be/FMSCZYu1JhE?si=iYXhWk9YxX6x5mcF",
-              "workingSets": "2",
-              "reps": "10-12"
-            },
-            {
-              "name": "Machine Hip Abduction",
-              "demoLink": "https://youtu.be/pozooPg6PBE?si=uVtC8JPKXvZKeVlE",
-              "workingSets": "2",
-              "reps": "10-12"
-            },
-            {
-              "name": "Standing Calf Raise",
-              "demoLink": "https://youtu.be/6lR2JdxUh7w?si=Q_4oyceNkI-WarRg",
-              "workingSets": "2",
-              "reps": "10-12"
-            }
-          ]
-        },
-        {
-          "dayName": "Rest Day",
-          "isRestDay": true,
-          "exercises": []
         }
       ]
     }

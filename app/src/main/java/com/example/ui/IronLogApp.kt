@@ -9,11 +9,22 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import com.google.firebase.auth.FirebaseAuth
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Timeline
-import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.outlined.Timeline
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.border
+import com.example.ui.theme.bounceClick
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -91,41 +102,77 @@ fun MainScreenWrapper(
     val bottomNavController = rememberNavController()
     
     val items = listOf(
-        Triple("home", Icons.Filled.Home, "HOME"),
-        Triple("programs", Icons.Filled.Star, "PROGRAMS"),
-        Triple("progress", Icons.Filled.Timeline, "PROGRESS"),
-        Triple("history", Icons.Filled.History, "HISTORY")
+        Triple("home", Icons.Outlined.Home, "HOME"),
+        Triple("programs", Icons.Outlined.Star, "PROGRAMS"),
+        Triple("progress", Icons.Outlined.Timeline, "PROGRESS"),
+        Triple("history", Icons.Outlined.History, "HISTORY"),
+        Triple("profile", Icons.Outlined.Person, "PROFILE")
     )
 
     Scaffold(
         containerColor = Color.Black,
         bottomBar = {
-            NavigationBar(containerColor = com.example.ui.theme.GlassDark, contentColor = Color.White) {
-                val navBackStackEntry by bottomNavController.currentBackStackEntryAsState()
-                val currentRoute = navBackStackEntry?.destination?.route
-                
-                items.forEach { (route, icon, label) ->
-                    NavigationBarItem(
-                        icon = { Icon(icon, contentDescription = label) },
-                        label = { Text(label, fontSize = 10.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, letterSpacing = 1.sp) },
-                        selected = currentRoute == route,
-                        onClick = {
-                            if (currentRoute != route) {
-                                bottomNavController.navigate(route) {
-                                    popUpTo(bottomNavController.graph.startDestinationId) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            }
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color.Black,
-                            selectedTextColor = Color.White,
-                            indicatorColor = Color.White,
-                            unselectedIconColor = com.example.ui.theme.GrayMedium,
-                            unselectedTextColor = com.example.ui.theme.GrayMedium
+            // Elegant Backlit Frosted Glass Floating Tab Bar (iOS 27 Liquid Glass style)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.Transparent)
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .navigationBarsPadding(),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            color = Color(0xBF000000), // backlit translucent carbon
+                            shape = RoundedCornerShape(24.dp)
                         )
-                    )
+                        .border(
+                            width = 1.dp,
+                            color = Color.White.copy(alpha = 0.16f), // faint edge highlight catching light
+                            shape = RoundedCornerShape(24.dp)
+                        )
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val navBackStackEntry by bottomNavController.currentBackStackEntryAsState()
+                    val currentRoute = navBackStackEntry?.destination?.route ?: "home"
+                    
+                    items.forEach { (route, icon, label) ->
+                        val isSelected = currentRoute == route
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier
+                                .weight(1f)
+                                .bounceClick {
+                                    if (currentRoute != route) {
+                                        bottomNavController.navigate(route) {
+                                            popUpTo(bottomNavController.graph.startDestinationId) { saveState = true }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
+                                    }
+                                }
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = label,
+                                tint = if (isSelected) Color.White else Color.White.copy(alpha = 0.4f),
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = label,
+                                color = if (isSelected) Color.White else Color.White.copy(alpha = 0.4f),
+                                fontSize = 9.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -137,30 +184,7 @@ fun MainScreenWrapper(
             modifier = Modifier.padding(innerPadding)
         ) {
             composable("home") {
-                var showProfileDialog by remember { mutableStateOf(false) }
                 val auth = FirebaseAuth.getInstance()
-                val currentUser = auth.currentUser
-
-                if (showProfileDialog) {
-                    com.example.ui.profile.ProfileDialog(
-                        repository = repository,
-                        onDismiss = { showProfileDialog = false },
-                        onSignOut = {
-                            auth.signOut()
-                            showProfileDialog = false
-                            rootNavController.navigate("login") {
-                                popUpTo(0) { inclusive = true }
-                            }
-                        },
-                        onLoginClick = {
-                            showProfileDialog = false
-                            rootNavController.navigate("login") {
-                                popUpTo(0) { inclusive = true }
-                            }
-                        }
-                    )
-                }
-
                 HomeScreen(
                     repository = repository,
                     onStartWorkout = { templateId ->
@@ -193,7 +217,9 @@ fun MainScreenWrapper(
                         rootNavController.navigate("active_workout")
                     },
                     onProfileClick = {
-                        showProfileDialog = true
+                        bottomNavController.navigate("profile") {
+                            launchSingleTop = true
+                        }
                     }
                 )
             }
@@ -202,9 +228,9 @@ fun MainScreenWrapper(
                     repository = repository,
                     onProgramStarted = {
                         bottomNavController.navigate("home") {
-                            popUpTo(bottomNavController.graph.startDestinationId) { saveState = true }
+                            popUpTo(bottomNavController.graph.startDestinationId) { saveState = false }
                             launchSingleTop = true
-                            restoreState = true
+                            restoreState = false
                         }
                     }
                 )
@@ -214,6 +240,24 @@ fun MainScreenWrapper(
             }
             composable("history") {
                 HistoryScreen(repository)
+            }
+            composable("profile") {
+                com.example.ui.profile.ProfileScreen(
+                    repository = repository,
+                    onSignOutClick = {
+                        coroutineScope.launch {
+                            repository.signOut()
+                            rootNavController.navigate("login") {
+                                popUpTo(0) { inclusive = true }
+                            }
+                        }
+                    },
+                    onLoginClick = {
+                        rootNavController.navigate("login") {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }
+                )
             }
         }
     }

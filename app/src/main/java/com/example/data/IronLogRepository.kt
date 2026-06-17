@@ -15,6 +15,7 @@ interface IronLogRepository {
     fun getTemplates(): Flow<List<Template>>
     suspend fun saveTemplate(template: Template)
     suspend fun deleteTemplate(templateId: String)
+    suspend fun clearAllTemplates()
     
     fun getWorkouts(): Flow<List<Workout>>
     fun getActiveWorkout(): Flow<Workout?>

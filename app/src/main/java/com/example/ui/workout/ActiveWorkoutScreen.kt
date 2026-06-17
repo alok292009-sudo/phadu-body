@@ -208,7 +208,7 @@ fun LoggedExerciseCard(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 12.dp),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = com.example.ui.theme.GlassDark),
+        colors = CardDefaults.cardColors(containerColor = com.example.ui.theme.GrayDark), // Opaque backdrop for clear contrast
         border = BorderStroke(1.dp, com.example.ui.theme.GlassBorderDark)
     ) {
         Column(modifier = Modifier.padding(16.dp).animateContentSize()) {

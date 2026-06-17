@@ -5,27 +5,38 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
     
-    <!-- Outer Shield / Peak -->
+    <!-- Bold Barbell Symbol -->
+    <!-- Barbell Shaft -->
     <path
-        android:fillColor="#34C759"
-        android:pathData="M 54,12 L 86,28 L 86,60 C 86,80 54,98 54,98 C 54,98 22,80 22,60 L 22,28 Z" />
+        android:fillColor="#FFFFFF"
+        android:pathData="M 18,52 L 90,52 L 90,56 L 18,56 Z" />
+        
+    <!-- Plates Left (Inner large plate & outer small plate) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 32,32 L 38,32 C 39.1,32 40,32.9 40,34 L 40,74 C 40,75.1 39.1,76 38,76 L 32,76 C 30.9,76 30,75.1 30,74 L 30,34 C 30,32.9 30.9,32 32,32 Z" />
+    <path
+        android:fillColor="#E5E5EA"
+        android:pathData="M 24,38 L 28,38 C 28.6,38 29,38.4 29,39 L 29,69 C 29,69.6 28.6,70 28,70 L 24,70 C 23.4,70 23,69.6 23,69 L 23,39 C 23,38.4 23.4,38 24,38 Z" />
 
-    <!-- Inner Shield (Black hollow) -->
-    <path
-        android:fillColor="#000000"
-        android:pathData="M 54,18 L 80,31 L 80,58 C 80,74 54,89 54,89 C 54,89 28,74 28,58 L 28,31 Z" />
-        
-    <!-- Aggressive Barbell (White) -->
+    <!-- Plates Right (Inner large plate & outer small plate) -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M 38,50 L 70,50 L 70,54 L 38,54 Z" />
-        
-    <!-- Plates (Green & White) -->
+        android:pathData="M 70,32 L 76,32 C 77.1,32 78,32.9 78,34 L 78,74 C 78,75.1 77.1,76 76,76 L 70,76 C 68.9,76 68,75.1 68,74 L 68,34 C 68,32.9 68.9,32 70,32 Z" />
     <path
-        android:fillColor="#34C759"
-        android:pathData="M 34,42 L 40,42 L 40,62 L 34,62 Z M 68,42 L 74,42 L 74,62 L 68,62 Z" />
-        
+        android:fillColor="#E5E5EA"
+        android:pathData="M 80,38 L 84,38 C 84.6,38 85,38.4 85,39 L 85,69 C 85,69.6 84.6,70 84,70 L 80,70 C 79.4,70 79,69.6 79,69 L 79,39 C 79,38.4 79.4,38 80,38 Z" />
+
+    <!-- Collars -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M 28,45 L 32,45 L 32,59 L 28,59 Z M 76,45 L 80,45 L 80,59 L 76,59 Z" />
+        android:fillColor="#8E8E93"
+        android:pathData="M 42,46 L 44,46 L 44,62 L 42,62 Z M 64,46 L 66,46 L 66,62 L 64,62 Z" />
+
+    <!-- Subtle Diagonal Glass Highlight across the whole icon (iOS Liquid style) -->
+    <path
+        android:fillColor="#26FFFFFF"
+        android:pathData="M 0,0 L 48,0 L 12,108 L 0,108 Z" />
+    <path
+        android:fillColor="#15FFFFFF"
+        android:pathData="M 48,0 L 64,0 L 28,108 L 12,108 Z" />
 </vector>
