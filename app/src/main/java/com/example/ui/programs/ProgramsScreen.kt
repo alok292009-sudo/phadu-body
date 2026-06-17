@@ -66,55 +66,72 @@ fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) 
             if (showConfirmDialog) {
                 AlertDialog(
                     onDismissRequest = { showConfirmDialog = false },
-                    containerColor = com.example.ui.theme.GlassDark,
-                    title = { Text("Start Program", color = Color.White) },
-                    text = { Text("Do you want to set this program as your main routine?", color = com.example.ui.theme.GrayMedium) },
+                    containerColor = com.example.ui.theme.GrayDark,
+                    titleContentColor = Color.White,
+                    textContentColor = com.example.ui.theme.GrayMedium,
+                    shape = RoundedCornerShape(24.dp),
+                    title = { Text("Start Program \uD83D\uDE80", fontWeight = FontWeight.Bold, fontSize = 22.sp) },
+                    text = { 
+                        Text(
+                            "Do you want to set '${program?.programName ?: "this program"}' as your main routine?\n\nThis will add the first week's workouts to your quick start templates.",
+                            fontSize = 15.sp, 
+                            lineHeight = 22.sp
+                        ) 
+                    },
                     confirmButton = {
-                        TextButton(onClick = {
-                            showConfirmDialog = false
-                            if (isLoading) return@TextButton
-                            isLoading = true
-                            coroutineScope.launch {
-                                try {
-                                    if (program!!.weeks.isEmpty()) {
-                                        android.widget.Toast.makeText(context, "Error: No routines found in program", android.widget.Toast.LENGTH_SHORT).show()
-                                    }
-                                    // Generate templates for the first week to keep it clean
-                                    val firstWeek = program!!.weeks.values.firstOrNull()
-                                    var templatesAdded = 0
-                                    firstWeek?.days?.filter { !it.isRestDay }?.forEach { day ->
-                                        val tExercises = day.exercises.mapIndexed { index, ex ->
-                                            TemplateExercise(
-                                                exerciseId = UUID.randomUUID().toString(),
-                                                exerciseName = ex.name,
-                                                targetSets = ex.workingSets?.toIntOrNull() ?: 3,
-                                                targetReps = ex.reps?.split("-")?.last()?.toIntOrNull() ?: 10,
-                                                order = index,
-                                                videoUrl = ex.demoLink
-                                            )
+                        Button(
+                            onClick = {
+                                showConfirmDialog = false
+                                if (isLoading) return@Button
+                                isLoading = true
+                                coroutineScope.launch {
+                                    try {
+                                        if (program!!.weeks.isEmpty()) {
+                                            android.widget.Toast.makeText(context, "Error: No routines found in program", android.widget.Toast.LENGTH_SHORT).show()
                                         }
-                                        val template = Template(
-                                            id = UUID.randomUUID().toString(),
-                                            name = day.dayName,
-                                            exercises = tExercises
-                                        )
-                                        repository.saveTemplate(template)
-                                        templatesAdded++
+                                        // Generate templates for the first week to keep it clean
+                                        val firstWeek = program!!.weeks.values.firstOrNull()
+                                        var templatesAdded = 0
+                                        firstWeek?.days?.filter { !it.isRestDay }?.forEach { day ->
+                                            val tExercises = day.exercises.mapIndexed { index, ex ->
+                                                TemplateExercise(
+                                                    exerciseId = UUID.randomUUID().toString(),
+                                                    exerciseName = ex.name,
+                                                    targetSets = ex.workingSets?.toIntOrNull() ?: 3,
+                                                    targetReps = ex.reps?.split("-")?.last()?.toIntOrNull() ?: 10,
+                                                    order = index,
+                                                    videoUrl = ex.demoLink
+                                                )
+                                            }
+                                            val template = Template(
+                                                id = UUID.randomUUID().toString(),
+                                                name = day.dayName,
+                                                exercises = tExercises
+                                            )
+                                            repository.saveTemplate(template)
+                                            templatesAdded++
+                                        }
+                                        android.widget.Toast.makeText(context, "Added $templatesAdded routines", android.widget.Toast.LENGTH_SHORT).show()
+                                        isLoading = false
+                                        onProgramStarted()
+                                    } catch (e: Exception) {
+                                        android.widget.Toast.makeText(context, "Error: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                                        isLoading = false
                                     }
-                                    android.widget.Toast.makeText(context, "Added $templatesAdded routines", android.widget.Toast.LENGTH_SHORT).show()
-                                    isLoading = false
-                                    onProgramStarted()
-                                } catch (e: Exception) {
-                                    android.widget.Toast.makeText(context, "Error: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
-                                    isLoading = false
                                 }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            if (isLoading) {
+                                CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            } else {
+                                Text("Let's Go!", fontWeight = FontWeight.Bold)
                             }
-                        }) {
-                            Text("Yes", color = Color.White)
                         }
                     },
                     dismissButton = {
-                        TextButton(onClick = { showConfirmDialog = false }) {
+                        TextButton(onClick = { if (!isLoading) showConfirmDialog = false }) {
                             Text("Cancel", color = com.example.ui.theme.GrayMedium)
                         }
                     }
