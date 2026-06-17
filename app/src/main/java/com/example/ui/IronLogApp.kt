@@ -37,7 +37,7 @@ fun IronLogApp(repository: IronLogRepository) {
 
     NavHost(
         navController = navController,
-        startDestination = "login",
+        startDestination = "main",
         modifier = Modifier
     ) {
         composable("login") {

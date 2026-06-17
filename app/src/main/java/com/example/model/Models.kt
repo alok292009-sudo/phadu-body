@@ -1,32 +1,38 @@
 package com.example.model
 
+import com.squareup.moshi.JsonClass
+
+@JsonClass(generateAdapter = true)
 data class Exercise(
     val id: String = "",
     val name: String = "",
     val muscleGroup: String = "",
     val unit: String = "kg",
     val isCustom: Boolean = false,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = 0L
 )
 
+@JsonClass(generateAdapter = true)
 data class Template(
     val id: String = "",
     val name: String = "",
     val exercises: List<TemplateExercise> = emptyList()
 )
 
+@JsonClass(generateAdapter = true)
 data class TemplateExercise(
     val exerciseId: String = "",
-    val exerciseName: String = "", // Added to simplify things
+    val exerciseName: String = "",
     val targetSets: Int = 3,
     val targetReps: Int = 10,
     val order: Int = 0,
     val videoUrl: String? = null
 )
 
+@JsonClass(generateAdapter = true)
 data class Workout(
     val id: String = "",
-    val date: Long = System.currentTimeMillis(),
+    val date: Long = 0L,
     val templateId: String? = null,
     val templateName: String? = null,
     val status: String = "in_progress",
@@ -35,6 +41,7 @@ data class Workout(
     val totalVolume: Double = 0.0
 )
 
+@JsonClass(generateAdapter = true)
 data class LoggedExercise(
     val exerciseId: String = "",
     val exerciseName: String = "",
@@ -42,6 +49,7 @@ data class LoggedExercise(
     val sets: List<WorkoutSet> = emptyList()
 )
 
+@JsonClass(generateAdapter = true)
 data class WorkoutSet(
     val setNumber: Int = 1,
     val weight: Double = 0.0,
@@ -50,6 +58,7 @@ data class WorkoutSet(
     val completedAt: Long? = null
 )
 
+@JsonClass(generateAdapter = true)
 data class PersonalRecord(
     val exerciseId: String = "",
     val bestWeight: RecordDetail? = null,
@@ -57,6 +66,7 @@ data class PersonalRecord(
     val bestEstimated1RM: RecordDetail? = null
 )
 
+@JsonClass(generateAdapter = true)
 data class RecordDetail(
     val value: Double = 0.0,
     val reps: Int = 0,
