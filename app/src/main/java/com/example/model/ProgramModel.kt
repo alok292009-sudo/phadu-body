@@ -5,10 +5,7 @@ import com.squareup.moshi.JsonClass
 data class Program(
     val programName: String = "",
     val author: String = "",
-    val weeks: Map<String, ProgramWeek> = emptyMap(),
-    // For new format
-    val programMetadata: Map<String, String>? = null,
-    val blocks: List<Map<String, Any>>? = null
+    val weeks: Map<String, ProgramWeek> = emptyMap()
 )
 
 @JsonClass(generateAdapter = true)

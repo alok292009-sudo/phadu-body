@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -73,6 +75,7 @@ fun HomeScreen(
                     radius = 2500f
                 )
             )
+            .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
         if (activeProgramState != null && 

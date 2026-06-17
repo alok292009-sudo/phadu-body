@@ -30,6 +30,7 @@ class FirebaseIronLogRepository : IronLogRepository {
         val listener = col.addSnapshotListener { snapshot, e ->
             if (e != null) {
                 Log.e("FirebaseRepo", "Error", e)
+                trySend(emptyList())
                 return@addSnapshotListener
             }
             if (snapshot != null) {
@@ -89,11 +90,43 @@ class FirebaseIronLogRepository : IronLogRepository {
         val listener = col.addSnapshotListener { snapshot, e ->
             if (e != null) {
                 Log.e("FirebaseRepo", "Listen error", e)
+                trySend(emptyList())
                 return@addSnapshotListener
             }
             if (snapshot != null) {
-                val templates = snapshot.documents.mapNotNull { it.toObject(Template::class.java) }
-                trySend(templates.sortedBy { it.name })
+                try {
+                    val templates = snapshot.documents.mapNotNull { doc ->
+                        try {
+                            doc.toObject(Template::class.java)
+                        } catch (ex: Exception) {
+                            Log.e("FirebaseRepo", "toObject(Template) failed, trying manual fallback", ex)
+                            try {
+                                val id = doc.getString("id") ?: doc.id
+                                val name = doc.getString("name") ?: ""
+                                val exercisesRaw = doc.get("exercises") as? List<*> ?: emptyList<Any>()
+                                val exercises = exercisesRaw.map { item ->
+                                    val map = item as? Map<*, *>
+                                    TemplateExercise(
+                                        exerciseId = map?.get("exerciseId") as? String ?: "",
+                                        exerciseName = map?.get("exerciseName") as? String ?: "",
+                                        targetSets = (map?.get("targetSets") as? Number)?.toInt() ?: 3,
+                                        targetReps = (map?.get("targetReps") as? Number)?.toInt() ?: 10,
+                                        order = (map?.get("order") as? Number)?.toInt() ?: 0,
+                                        videoUrl = map?.get("videoUrl") as? String
+                                    )
+                                }
+                                Template(id = id, name = name, exercises = exercises)
+                            } catch (fallbackEx: Exception) {
+                                Log.e("FirebaseRepo", "Fallback manual mapping also failed", fallbackEx)
+                                null
+                            }
+                        }
+                    }
+                    trySend(templates.sortedBy { it.name })
+                } catch (exAll: Exception) {
+                    Log.e("FirebaseRepo", "Error mapping templates list", exAll)
+                    trySend(emptyList())
+                }
             }
         }
         awaitClose { listener.remove() }
@@ -126,8 +159,68 @@ class FirebaseIronLogRepository : IronLogRepository {
                 return@addSnapshotListener
             }
             if (snapshot != null) {
-                val workouts = snapshot.documents.mapNotNull { it.toObject(Workout::class.java) }
-                trySend(workouts)
+                try {
+                    val workouts = snapshot.documents.mapNotNull { doc ->
+                        try {
+                            doc.toObject(Workout::class.java)
+                        } catch (ex: Exception) {
+                            Log.e("FirebaseRepo", "toObject(Workout) failed, trying manual fallback", ex)
+                            try {
+                                val id = doc.getString("id") ?: doc.id
+                                val date = doc.getLong("date") ?: 0L
+                                val templateId = doc.getString("templateId")
+                                val templateName = doc.getString("templateName")
+                                val status = doc.getString("status") ?: "in_progress"
+                                val durationMinutes = doc.getLong("durationMinutes")?.toInt() ?: 0
+                                val totalVolume = doc.getDouble("totalVolume") ?: 0.0
+                                
+                                val loggedRaw = doc.get("loggedExercises") as? List<*> ?: emptyList<Any>()
+                                val loggedExercises = loggedRaw.map { item ->
+                                    val exMap = item as? Map<*, *>
+                                    val exerciseId = exMap?.get("exerciseId") as? String ?: ""
+                                    val exerciseName = exMap?.get("exerciseName") as? String ?: ""
+                                    val videoUrl = exMap?.get("videoUrl") as? String
+                                    
+                                    val setsRaw = exMap?.get("sets") as? List<*> ?: emptyList<Any>()
+                                    val sets = setsRaw.map { setItem ->
+                                        val setMap = setItem as? Map<*, *>
+                                        WorkoutSet(
+                                            setNumber = (setMap?.get("setNumber") as? Number)?.toInt() ?: 1,
+                                            weight = (setMap?.get("weight") as? Number)?.toDouble() ?: 0.0,
+                                            reps = (setMap?.get("reps") as? Number)?.toInt() ?: 0,
+                                            isWarmup = (setMap?.get("warmup") as? Boolean ?: setMap?.get("isWarmup") as? Boolean ?: false),
+                                            completedAt = (setMap?.get("completedAt") as? Number)?.toLong(),
+                                            rpe = (setMap?.get("rpe") as? Number)?.toFloat()
+                                        )
+                                    }
+                                    LoggedExercise(
+                                        exerciseId = exerciseId,
+                                        exerciseName = exerciseName,
+                                        videoUrl = videoUrl,
+                                        sets = sets
+                                    )
+                                }
+                                Workout(
+                                    id = id,
+                                    date = date,
+                                    templateId = templateId,
+                                    templateName = templateName,
+                                    status = status,
+                                    durationMinutes = durationMinutes,
+                                    loggedExercises = loggedExercises,
+                                    totalVolume = totalVolume
+                                )
+                            } catch (fallbackEx: Exception) {
+                                Log.e("FirebaseRepo", "Fallback manual mapping failed for Workout", fallbackEx)
+                                null
+                            }
+                        }
+                    }
+                    trySend(workouts)
+                } catch (exAll: Exception) {
+                    Log.e("FirebaseRepo", "Error mapping workouts", exAll)
+                    trySend(emptyList())
+                }
             }
         }
         awaitClose { listener.remove() }
@@ -143,7 +236,67 @@ class FirebaseIronLogRepository : IronLogRepository {
                 return@addSnapshotListener
             }
             if (snapshot != null && !snapshot.isEmpty) {
-                trySend(snapshot.documents.first().toObject(Workout::class.java))
+                try {
+                    val doc = snapshot.documents.first()
+                    val workout = try {
+                        doc.toObject(Workout::class.java)
+                    } catch (ex: Exception) {
+                        Log.e("FirebaseRepo", "toObject(Workout) failed for active, trying manual fallback", ex)
+                        try {
+                            val id = doc.getString("id") ?: doc.id
+                            val date = doc.getLong("date") ?: 0L
+                            val templateId = doc.getString("templateId")
+                            val templateName = doc.getString("templateName")
+                            val status = doc.getString("status") ?: "in_progress"
+                            val durationMinutes = doc.getLong("durationMinutes")?.toInt() ?: 0
+                            val totalVolume = doc.getDouble("totalVolume") ?: 0.0
+                            
+                            val loggedRaw = doc.get("loggedExercises") as? List<*> ?: emptyList<Any>()
+                            val loggedExercises = loggedRaw.map { item ->
+                                val exMap = item as? Map<*, *>
+                                val exerciseId = exMap?.get("exerciseId") as? String ?: ""
+                                val exerciseName = exMap?.get("exerciseName") as? String ?: ""
+                                val videoUrl = exMap?.get("videoUrl") as? String
+                                
+                                val setsRaw = exMap?.get("sets") as? List<*> ?: emptyList<Any>()
+                                val sets = setsRaw.map { setItem ->
+                                    val setMap = setItem as? Map<*, *>
+                                    WorkoutSet(
+                                        setNumber = (setMap?.get("setNumber") as? Number)?.toInt() ?: 1,
+                                        weight = (setMap?.get("weight") as? Number)?.toDouble() ?: 0.0,
+                                        reps = (setMap?.get("reps") as? Number)?.toInt() ?: 0,
+                                        isWarmup = (setMap?.get("warmup") as? Boolean ?: setMap?.get("isWarmup") as? Boolean ?: false),
+                                        completedAt = (setMap?.get("completedAt") as? Number)?.toLong(),
+                                        rpe = (setMap?.get("rpe") as? Number)?.toFloat()
+                                    )
+                                }
+                                LoggedExercise(
+                                    exerciseId = exerciseId,
+                                    exerciseName = exerciseName,
+                                    videoUrl = videoUrl,
+                                    sets = sets
+                                )
+                            }
+                            Workout(
+                                id = id,
+                                date = date,
+                                templateId = templateId,
+                                templateName = templateName,
+                                status = status,
+                                durationMinutes = durationMinutes,
+                                loggedExercises = loggedExercises,
+                                totalVolume = totalVolume
+                            )
+                        } catch (fallbackEx: Exception) {
+                            Log.e("FirebaseRepo", "Fallback manual mapping failed for active Workout", fallbackEx)
+                            null
+                        }
+                    }
+                    trySend(workout)
+                } catch (exAll: Exception) {
+                    Log.e("FirebaseRepo", "Error mapping active workout", exAll)
+                    trySend(null)
+                }
             } else {
                 trySend(null)
             }

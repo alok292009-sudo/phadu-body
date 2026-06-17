@@ -1,6 +1,7 @@
 package com.example.model
 
 import com.squareup.moshi.JsonClass
+import kotlin.jvm.JvmSuppressWildcards
 
 @JsonClass(generateAdapter = true)
 data class Exercise(
@@ -16,7 +17,7 @@ data class Exercise(
 data class Template(
     val id: String = "",
     val name: String = "",
-    val exercises: List<TemplateExercise> = emptyList()
+    val exercises: List<@JvmSuppressWildcards TemplateExercise> = emptyList()
 )
 
 @JsonClass(generateAdapter = true)
@@ -37,7 +38,7 @@ data class Workout(
     val templateName: String? = null,
     val status: String = "in_progress",
     val durationMinutes: Int = 0,
-    val loggedExercises: List<LoggedExercise> = emptyList(),
+    val loggedExercises: List<@JvmSuppressWildcards LoggedExercise> = emptyList(),
     val totalVolume: Double = 0.0
 )
 
@@ -46,7 +47,7 @@ data class LoggedExercise(
     val exerciseId: String = "",
     val exerciseName: String = "",
     val videoUrl: String? = null,
-    val sets: List<WorkoutSet> = emptyList()
+    val sets: List<@JvmSuppressWildcards WorkoutSet> = emptyList()
 )
 
 @JsonClass(generateAdapter = true)
@@ -82,7 +83,7 @@ data class UserProfile(
     val weightKg: Double = 0.0,
     val heightCm: Double = 0.0,
     val gender: String = "Not specified",
-    val progressPhotos: List<ProgressPhoto> = emptyList()
+    val progressPhotos: List<@JvmSuppressWildcards ProgressPhoto> = emptyList()
 )
 
 @JsonClass(generateAdapter = true)
