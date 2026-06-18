@@ -144,6 +144,54 @@ fun ActiveWorkoutScreen(
             shape = RoundedCornerShape(0.dp),
             text = {
                 LazyColumn {
+                    if (isSwapping) {
+                        val indexStr = exerciseToSwapIndex!!
+                        val currentEx = activeWorkout!!.loggedExercises.getOrNull(indexStr)
+                        if (currentEx != null && currentEx.substitutionOpts.isNotEmpty()) {
+                            item {
+                                Text(
+                                    "RECOMMENDED SUBSTITUTIONS",
+                                    color = com.example.ui.theme.AccentGreen,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                                )
+                            }
+                            items(currentEx.substitutionOpts) { subName ->
+                                Text(
+                                    text = subName.uppercase(),
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            val newList = activeWorkout!!.loggedExercises.toMutableList()
+                                            newList[indexStr] = currentEx.copy(
+                                                exerciseId = subName,
+                                                exerciseName = subName,
+                                                isSubstitution = true
+                                            )
+                                            coroutineScope.launch {
+                                                repository.saveWorkout(activeWorkout!!.copy(loggedExercises = newList))
+                                                exerciseToSwapIndex = null
+                                            }
+                                        }
+                                        .padding(vertical = 14.dp)
+                                )
+                                HorizontalDivider(color = Color(0xFF222222))
+                            }
+                            item {
+                                Text(
+                                    "ALL EXERCISES",
+                                    color = Color.Gray,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
+                                )
+                            }
+                        }
+                    }
+
                     itemsIndexed(availableExercises) { _, ex ->
                         Text(
                             text = ex.name.uppercase(),
@@ -154,16 +202,18 @@ fun ActiveWorkoutScreen(
                                 .clickable {
                                     if (isSwapping) {
                                         val indexStr = exerciseToSwapIndex!!
-                                        val oldSets = activeWorkout!!.loggedExercises[indexStr].sets
-                                        val newList = activeWorkout!!.loggedExercises.toMutableList()
-                                        newList[indexStr] = LoggedExercise(
-                                            exerciseId = ex.id,
-                                            exerciseName = ex.name,
-                                            sets = oldSets
-                                        )
-                                        coroutineScope.launch {
-                                            repository.saveWorkout(activeWorkout!!.copy(loggedExercises = newList))
-                                            exerciseToSwapIndex = null
+                                        val currentEx = activeWorkout!!.loggedExercises.getOrNull(indexStr)
+                                        if (currentEx != null) {
+                                            val newList = activeWorkout!!.loggedExercises.toMutableList()
+                                            newList[indexStr] = currentEx.copy(
+                                                exerciseId = ex.id,
+                                                exerciseName = ex.name,
+                                                isSubstitution = true
+                                            )
+                                            coroutineScope.launch {
+                                                repository.saveWorkout(activeWorkout!!.copy(loggedExercises = newList))
+                                                exerciseToSwapIndex = null
+                                            }
                                         }
                                     } else {
                                         val newList = activeWorkout!!.loggedExercises + LoggedExercise(
@@ -225,8 +275,42 @@ fun LoggedExerciseCard(
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             
+            if (loggedExercise.note != null || loggedExercise.targetRestStr != null || loggedExercise.techniqueRequirements != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    loggedExercise.targetRestStr?.let {
+                        AssistChip(
+                            onClick = {},
+                            label = { Text("Rest: $it", color = Color.White, fontSize = 10.sp) },
+                            colors = AssistChipDefaults.assistChipColors(containerColor = Color(0x1Fffffff))
+                        )
+                    }
+                    loggedExercise.techniqueRequirements?.let {
+                        if (it != "N/A" && it.isNotEmpty()) {
+                            AssistChip(
+                                onClick = {},
+                                label = { Text("Technique: $it", color = com.example.ui.theme.AccentGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold) },
+                                colors = AssistChipDefaults.assistChipColors(containerColor = Color(0x3300FF66))
+                            )
+                        }
+                    }
+                }
+                loggedExercise.note?.let {
+                    Text(
+                        text = "Cue: $it",
+                        fontSize = 11.sp,
+                        color = Color.LightGray,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(10.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("SET", modifier = Modifier.weight(0.5f), textAlign = TextAlign.Center, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, color = com.example.ui.theme.GrayMedium)
                 Text("KG", modifier = Modifier.weight(1.5f), textAlign = TextAlign.Center, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, color = com.example.ui.theme.GrayMedium)
@@ -321,6 +405,30 @@ fun LoggedExerciseCard(
                         }
                     }
                     
+                    // Target goals
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 32.dp, end = 16.dp, bottom = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Target: ${set.targetReps ?: "-"} reps @ RPE ${set.targetRpe ?: "-"}${if (set.isWarmup) " (WARM-UP)" else ""}",
+                            color = if (set.isWarmup) Color(0xFFFFD700) else com.example.ui.theme.AccentGreen,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        if (set.notes != null) {
+                            Text(
+                                text = set.notes,
+                                color = Color.Gray,
+                                fontSize = 10.sp,
+                                modifier = Modifier.padding(start = 8.dp)
+                            )
+                        }
+                    }
+
                     // RPE Slider
                     Row(
                         modifier = Modifier

@@ -1,20 +1,14 @@
 package com.example.ui.home
 
+import android.util.Log
 import android.widget.Toast
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.animation.*
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,26 +24,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.IronLogRepository
-import com.example.model.ActiveProgramState
-import com.example.model.PersonalRecord
-import com.example.model.Program
-import com.example.model.Template
-import com.example.model.Workout
+import com.example.model.*
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Date
-import java.util.Locale
-import java.util.UUID
-import com.example.ui.theme.bounceClick
+import java.util.*
 
 @Composable
 fun HomeScreen(
     repository: IronLogRepository,
-    onStartWorkout: (templateId: String?) -> Unit,
+    onStartWorkout: (Workout) -> Unit,
     onResumeWorkout: () -> Unit,
     onProfileClick: () -> Unit,
     onNavigateToTab: (String) -> Unit = {}
@@ -58,65 +44,432 @@ fun HomeScreen(
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
 
-    var templates by remember { mutableStateOf<List<Template>>(emptyList()) }
-    var workoutsList by remember { mutableStateOf<List<Workout>>(emptyList()) }
-    var recentWorkout by remember { mutableStateOf<Workout?>(null) }
     var activeWorkout by remember { mutableStateOf<Workout?>(null) }
     var activeProgramState by remember { mutableStateOf<ActiveProgramState?>(null) }
+    var workoutsList by remember { mutableStateOf<List<Workout>>(emptyList()) }
     var rawPrs by remember { mutableStateOf<List<PersonalRecord>>(emptyList()) }
+    var program by remember { mutableStateOf<Program?>(null) }
+    var isLoadingProgram by remember { mutableStateOf(false) }
 
-    var showWarmupDialog by remember { mutableStateOf(false) }
+    // Onboarding wizard step
+    var onboardingStep by remember { mutableStateOf(0) }
 
     LaunchedEffect(Unit) {
         repository.seedInitialExercises()
-        
-        launch { repository.getTemplates().collect { templates = it } }
-        launch {
-            repository.getWorkouts().collect { workouts ->
-                workoutsList = workouts
-                recentWorkout = workouts.filter { it.status == "completed" }.maxByOrNull { it.date }
-            }
-        }
         launch { repository.getActiveWorkout().collect { activeWorkout = it } }
         launch { repository.getActiveProgramState().collect { activeProgramState = it } }
+        launch { repository.getWorkouts().collect { workoutsList = it } }
         launch { repository.getPersonalRecords().collect { rawPrs = it } }
     }
 
-    // Dynamic extraction of muscle groups trained today from template
-    val nextWorkoutIndex = remember(activeProgramState, templates) {
-        activeProgramState?.let {
-            it.workoutsCompletedThisWeek.coerceAtMost(templates.size - 1)
-        } ?: 0
+    // Load static training program jeff_nippard.json on launch
+    LaunchedEffect(Unit) {
+        isLoadingProgram = true
+        try {
+            val json = context.assets.open("jeff_nippard.json").bufferedReader().use { it.readText() }
+            val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
+            val adapter = moshi.adapter(Program::class.java)
+            program = adapter.fromJson(json)
+        } catch (e: Exception) {
+            Log.e("HomeScreen", "Failed to load local program asset", e)
+        }
+        isLoadingProgram = false
+    }
+
+    val currentWeekKey = remember(activeProgramState) {
+        val idx = activeProgramState?.currentWeekIndex ?: 0
+        "week${idx + 1}"
+    }
+
+    val daysList = remember(program, currentWeekKey) {
+        program?.weeks?.get(currentWeekKey)?.days ?: emptyList()
+    }
+
+    // Selected day index to view detail in dashboard (defaults to currentDayIndex)
+    var selectedDayIndex by remember { mutableStateOf(0) }
+    val activeProgramStateSnap = activeProgramState
+    LaunchedEffect(activeProgramStateSnap) {
+        if (activeProgramStateSnap != null) {
+            selectedDayIndex = activeProgramStateSnap.currentDayIndex
+        }
+    }
+
+    Scaffold(
+        containerColor = Color.Transparent,
+        modifier = Modifier.background(
+            Brush.radialGradient(
+                colors = listOf(Color(0xFF16161A), Color.Black),
+                center = Offset(500f, -200f),
+                radius = 2500f
+            )
+        )
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            if (activeProgramState == null) {
+                // ==================== ONBOARDING FLOW ====================
+                if (program == null || isLoadingProgram) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Color.White)
+                    }
+                } else {
+                    OnboardingWizard(
+                        program = program!!,
+                        step = onboardingStep,
+                        onStepChange = { onboardingStep = it },
+                        onStartProgram = {
+                            coroutineScope.launch {
+                                val state = ActiveProgramState(
+                                    programKey = "jeff_nippard.json",
+                                    programName = program!!.programName,
+                                    currentWeekIndex = 0,
+                                    currentDayIndex = 0,
+                                    completedWorkoutsMap = emptyMap(),
+                                    freeNavigationEnabled = false,
+                                    workoutsCompletedThisWeek = 0,
+                                    totalWorkoutsThisWeek = daysList.count { !it.isRestDay }
+                                )
+                                repository.saveActiveProgramState(state)
+                                Toast.makeText(context, "Operating system initialized for: ${program!!.programName}", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    )
+                }
+            } else {
+                // ==================== GUIDED TRAINING OS DASHBOARD ====================
+                if (program == null) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Color.White)
+                    }
+                } else {
+                    DashboardContent(
+                        program = program!!,
+                        activeProgramState = activeProgramState!!,
+                        activeWorkout = activeWorkout,
+                        daysList = daysList,
+                        selectedDayIndex = selectedDayIndex,
+                        onSelectDayIndex = { selectedDayIndex = it },
+                        workoutsList = workoutsList,
+                        rawPrs = rawPrs,
+                        onResumeWorkout = onResumeWorkout,
+                        onStartWorkout = onStartWorkout,
+                        onToggleFreeNav = { enabled ->
+                            coroutineScope.launch {
+                                repository.saveActiveProgramState(
+                                    activeProgramState!!.copy(freeNavigationEnabled = enabled)
+                                )
+                            }
+                        },
+                        onUnlockNextWeek = {
+                            coroutineScope.launch {
+                                val nextWeekVal = activeProgramState!!.currentWeekIndex + 1
+                                val state = activeProgramState!!.copy(
+                                    currentWeekIndex = nextWeekVal,
+                                    currentDayIndex = 0,
+                                    completedWorkoutsMap = emptyMap(),
+                                    workoutsCompletedThisWeek = 0
+                                )
+                                repository.saveActiveProgramState(state)
+                                Toast.makeText(context, "UNLOCKED WEEK ${nextWeekVal + 1}!", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        onResetProgram = {
+                            coroutineScope.launch {
+                                repository.saveActiveProgramState(null)
+                                onboardingStep = 0
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ==================== COMPOSABLE COMPONENTS ====================
+
+@Composable
+fun OnboardingWizard(
+    program: Program,
+    step: Int,
+    onStepChange: (Int) -> Unit,
+    onStartProgram: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Spacer(modifier = Modifier.height(40.dp))
+        
+        // Progress Indicator Dots
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(bottom = 24.dp)
+        ) {
+            for (i in 0..3) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(
+                            color = if (step == i) com.example.ui.theme.AccentGreen else Color.White.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(4.dp)
+                        )
+                )
+            }
+        }
+
+        Surface(
+            color = com.example.ui.theme.GrayDark,
+            border = BorderStroke(1.dp, com.example.ui.theme.GlassBorderDark),
+            shape = RoundedCornerShape(24.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                when (step) {
+                    0 -> {
+                        // Overview Step
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = com.example.ui.theme.AccentGreen,
+                            modifier = Modifier.size(64.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        Text(
+                            text = "GUIDED OPERATING SYSTEM",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = com.example.ui.theme.AccentGreen,
+                            letterSpacing = 1.5.sp
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = program.programName.uppercase(),
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 28.sp
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "by ${program.author}",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = com.example.ui.theme.GrayMedium,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text(
+                            text = "This isn't a spreadsheet clicker. Beautifully engineered around modern science, this system will guide you set by set, with specific targets, warmups, substitutions, and rest days configured directly from the certified program instructions.",
+                            fontSize = 14.sp,
+                            lineHeight = 22.sp,
+                            color = Color.LightGray,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    1 -> {
+                        // Explanation Step
+                        Icon(
+                            imageVector = Icons.Outlined.Star,
+                            contentDescription = null,
+                            tint = com.example.ui.theme.AccentGreen,
+                            modifier = Modifier.size(64.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "SCIENCE & RPE PRINCIPLES",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "RPE (Rate of Perceived Exertion) is your velocity controller:\n\n" +
+                                    "• Early Sets: Usually 7-8 RPE. Leaves 2-3 reps in reserve to optimize pristine mechanical tension.\n\n" +
+                                    "• Last Sets: Driven to ~9-10 RPE / complete failure. Generates hyper-intensified metabolic fatigue.\n\n" +
+                                    "• Rest Timers: Science-backed rest durations up to 5 minutes allow target musculature to recover perfect ATP performance.",
+                            fontSize = 13.sp,
+                            lineHeight = 20.sp,
+                            color = Color.LightGray,
+                            textAlign = TextAlign.Start
+                        )
+                    }
+
+                    2 -> {
+                        // Split Step
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            tint = com.example.ui.theme.AccentGreen,
+                            modifier = Modifier.size(64.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "THE WEEKLY TRAINING SPLIT",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        // Render days of week
+                        val weekdays = listOf(
+                            "Mon" to "Upper (Strength Focus)",
+                            "Tue" to "Lower (Strength Focus)",
+                            "Wed" to "Rest & Recovery Day",
+                            "Thu" to "Upper Body Hypertrophy",
+                            "Fri" to "Legs / Lower Body Focus",
+                            "Sat" to "Rest Day",
+                            "Sun" to "Rest Day"
+                        )
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            weekdays.forEach { (day, target) ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(day, fontWeight = FontWeight.Bold, color = com.example.ui.theme.AccentGreen, fontSize = 12.sp)
+                                    Text(target, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+
+                    3 -> {
+                        // Final step
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = com.example.ui.theme.AccentGreen,
+                            modifier = Modifier.size(64.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "SYSTEM INITIALIZED",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "By clicking below, you'll spin up your active program instance of 'The Bodybuilding Transformation System'. Your metrics (completion percentage, streak, weekly volume, and PR history) will update automatically in real-time.",
+                            fontSize = 14.sp,
+                            lineHeight = 22.sp,
+                            color = Color.LightGray,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Onboarding button actions
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            if (step > 0) {
+                OutlinedButton(
+                    onClick = { onStepChange(step - 1) },
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.4f)),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                    modifier = Modifier.height(48.dp)
+                ) {
+                    Text("PREVIOUS")
+                }
+            } else {
+                Spacer(modifier = Modifier.width(1.dp))
+            }
+
+            Button(
+                onClick = {
+                    if (step < 3) {
+                        onStepChange(step + 1)
+                    } else {
+                        onStartProgram()
+                    }
+                },
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = com.example.ui.theme.AccentGreen, contentColor = Color.White),
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 12.dp)
+                    .height(48.dp)
+            ) {
+                Text(if (step < 3) "CONTINUE" else "START GUIDED PROGRAM NOW 🚀", fontWeight = FontWeight.Black)
+            }
+        }
+        Spacer(modifier = Modifier.height(60.dp))
+    }
+}
+
+@Composable
+fun DashboardContent(
+    program: Program,
+    activeProgramState: ActiveProgramState,
+    activeWorkout: Workout?,
+    daysList: List<ProgramDay>,
+    selectedDayIndex: Int,
+    onSelectDayIndex: (Int) -> Unit,
+    workoutsList: List<Workout>,
+    rawPrs: List<PersonalRecord>,
+    onResumeWorkout: () -> Unit,
+    onStartWorkout: (Workout) -> Unit,
+    onToggleFreeNav: (Boolean) -> Unit,
+    onUnlockNextWeek: () -> Unit,
+    onResetProgram: () -> Unit
+) {
+    val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    val completedMap = activeProgramState.completedWorkoutsMap
+    val currentWeekName = "Foundation Block - Week ${activeProgramState.currentWeekIndex + 1}"
+
+    // Calculated metrics
+    val totalScheduledDays = remember(program) {
+        // Find total days count across weeks in program (week 1 days + week 2 days...)
+        program.weeks.values.sumOf { block -> block.days.count { !it.isRestDay } }
     }
     
-    val todayTemplate = remember(templates, nextWorkoutIndex, activeProgramState) {
-        if (activeProgramState != null && templates.isNotEmpty()) {
-            templates.getOrNull(nextWorkoutIndex)
-        } else null
+    val totalCompletedDays = remember(workoutsList) {
+        workoutsList.count { it.status == "completed" }
+    }
+    
+    val completionPercent = remember(totalScheduledDays, totalCompletedDays) {
+        if (totalScheduledDays == 0) 0 else ((totalCompletedDays.toDouble() / totalScheduledDays) * 100).toInt().coerceIn(0, 100)
     }
 
-    val todayMuscleGroups = remember(todayTemplate) {
-        todayTemplate?.let { template ->
-            // extract keywords or resolve
-            val nameClean = template.name.lowercase()
-            when {
-                nameClean.contains("upper") -> listOf("CHEST", "BACK", "SHOULDERS", "ARMS")
-                nameClean.contains("lower") -> listOf("QUADS", "HAMSTRINGS", "CALVES", "ABS")
-                nameClean.contains("push") -> listOf("CHEST", "SHOULDERS", "TRICEPS")
-                nameClean.contains("pull") -> listOf("BACK", "REAR DELTS", "BICEPS")
-                nameClean.contains("legs") -> listOf("QUADS", "HAMSTRINGS", "CALVES")
-                else -> listOf("GENERAL HYPERTROPHY")
-            }
-        } ?: emptyList()
-    }
-
-    // Precise consecutive calendar day streak
-    val streakCount = remember(workoutsList) {
+    val currentStreak = remember(workoutsList) {
         val completed = workoutsList.filter { it.status == "completed" }
         val sdfDay = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val uniqueDays = completed.map { sdfDay.format(Date(it.date)) }.toSet()
         
-        var tempCalendar = Calendar.getInstance()
+        val tempCalendar = Calendar.getInstance()
         var streak = 0
         
         val todayStr = sdfDay.format(tempCalendar.time)
@@ -144,653 +497,551 @@ fun HomeScreen(
         streak
     }
 
-    // This week's total volume (completed last 7 days)
-    val thisWeekVolume = remember(workoutsList) {
+    val weeklyVolume = remember(workoutsList) {
         val sevenDaysAgo = System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000L
         workoutsList.filter { it.status == "completed" && it.date >= sevenDaysAgo }
             .sumOf { it.totalVolume }
     }
 
-    // PRs set during the most recently completed workout
-    val recentPrs = remember(recentWorkout, rawPrs) {
-        recentWorkout?.let { wk ->
-            rawPrs.filter { pr ->
-                pr.bestWeight?.workoutId == wk.id || pr.bestEstimated1RM?.workoutId == wk.id
-            }
-        } ?: emptyList()
+    val newestPR = remember(rawPrs) {
+        rawPrs.flatMap { pr ->
+            listOfNotNull(pr.bestWeight, pr.bestVolume)
+        }.maxByOrNull { it.date }
+    }
+
+    // Checking if all current week workouts are completed
+    val totalWorkoutsThisWeek = remember(daysList) { daysList.count { !it.isRestDay } }
+    val isWeekCompleted = remember(completedMap, activeProgramState) {
+        val wc = (0 until daysList.size).count { idx ->
+            val day = daysList[idx]
+            !day.isRestDay && completedMap["week${activeProgramState.currentWeekIndex + 1}_$idx"] == true
+        }
+        wc >= totalWorkoutsThisWeek && totalWorkoutsThisWeek > 0
     }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(Color(0xFF16161A), Color.Black),
-                    center = Offset(500f, -200f),
-                    radius = 2500f
-                )
-            )
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
-        // Welcoming header block
+        // App header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 16.dp, top = 16.dp),
+                .padding(bottom = 12.dp, top = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
                 Text(
-                    text = "IRON LOGG",
+                    text = "IRON LOGG OS",
                     color = Color.White,
-                    fontSize = 32.sp,
+                    fontSize = 28.sp,
                     fontWeight = FontWeight.Black,
-                    letterSpacing = 2.sp
+                    letterSpacing = 1.5.sp
                 )
                 Text(
-                    text = "PRECISION INDEPENDENT ATHLETE SYSTEM",
-                    color = com.example.ui.theme.GrayMedium,
+                    text = "PRECISION GUIDED ATHLETE HARDWARE",
+                    color = com.example.ui.theme.AccentGreen,
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp
                 )
             }
-            IconButton(
-                onClick = onProfileClick,
+            Box(
                 modifier = Modifier
-                    .size(44.dp)
-                    .background(com.example.ui.theme.GlassDark, shape = RoundedCornerShape(12.dp))
-                    .border(1.dp, com.example.ui.theme.GlassBorderDark, shape = RoundedCornerShape(12.dp))
+                    .background(com.example.ui.theme.GlassDark, RoundedCornerShape(12.dp))
+                    .border(1.dp, com.example.ui.theme.GlassBorderDark, RoundedCornerShape(12.dp))
+                    .clickable { onResetProgram() }
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Person,
-                    contentDescription = "Profile",
-                    tint = Color.White
-                )
+                Text("RESET ENGINE", color = com.example.ui.theme.ErrorColor, fontSize = 9.sp, fontWeight = FontWeight.Bold)
             }
         }
 
-        // 1. Warm Up protocol button at the top
-        Button(
-            onClick = { showWarmupDialog = true },
-            colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
-            shape = RoundedCornerShape(14.dp),
+        // Active Program Card
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(54.dp)
-                .padding(bottom = 12.dp)
-                .testTag("warmup_protocol_button")
+                .padding(bottom = 16.dp),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = com.example.ui.theme.GlassDark),
+            border = BorderStroke(1.dp, com.example.ui.theme.GlassBorderDark)
         ) {
-            Text(
-                text = "🔥 OPEN WARM UP PROTOCOL", 
-                fontWeight = FontWeight.Black, 
-                fontSize = 14.sp, 
-                letterSpacing = 1.5.sp
-            )
-        }
-
-        Spacer(modifier = Modifier.height(6.dp))
-
-        // 2. Scheduled routine / Choose split hero card
-        if (activeProgramState != null && todayTemplate != null) {
-            Text(
-                text = "TODAY'S SCHEDULED WORKOUT (WEEK ${activeProgramState!!.currentWeekIndex + 1})",
-                color = com.example.ui.theme.GrayMedium,
-                fontWeight = FontWeight.Bold,
-                fontSize = 11.sp,
-                letterSpacing = 1.5.sp,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-            
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp)
-                    .testTag("today_scheduled_card"),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = com.example.ui.theme.GlassDark),
-                border = BorderStroke(1.dp, com.example.ui.theme.GlassBorderDark)
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text(
-                        text = todayTemplate.name.uppercase(),
-                        color = Color.White,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 26.sp,
-                        lineHeight = 30.sp
-                    )
-                    
-                    if (todayMuscleGroups.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            modifier = Modifier.horizontalScroll(rememberScrollState())
-                        ) {
-                            todayMuscleGroups.forEach { grp ->
-                                Box(
-                                    modifier = Modifier
-                                        .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(6.dp))
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        text = grp,
-                                        color = Color.White.copy(alpha = 0.8f),
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        letterSpacing = 0.5.sp
-                                    )
-                                }
-                            }
-                        }
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "CURRENT ACTIVE LESSON",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = com.example.ui.theme.GrayMedium,
+                    letterSpacing = 1.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            program.programName,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White,
+                            lineHeight = 22.sp
+                        )
+                        Text(
+                            currentWeekName.uppercase(),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = com.example.ui.theme.AccentGreen,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
                     }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Box(
-                            modifier = Modifier
-                                .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 10.dp, vertical = 6.dp)
-                        ) {
-                            Text(
-                                text = "${todayTemplate.exercises.size} EXERCISES",
-                                color = Color.White,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 10.dp, vertical = 6.dp)
-                        ) {
-                            val estDuration = todayTemplate.exercises.sumOf { it.targetSets * 4 }
-                            Text(
-                                text = "~$estDuration MIN DURATION",
-                                color = Color.White,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(20.dp))
-                    
-                    Button(
-                        onClick = { if (activeWorkout != null) onResumeWorkout() else onStartWorkout(todayTemplate.id) },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
-                        shape = RoundedCornerShape(10.dp),
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .testTag("start_workout_button")
+                            .background(
+                                color = com.example.ui.theme.AccentGreen.copy(alpha = 0.2f),
+                                shape = RoundedCornerShape(24.dp)
+                            )
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = if (activeWorkout != null) "RESUME ACTIVE WORKOUT" else "START WORKOUT", 
+                            text = "${completionPercent}%",
+                            color = com.example.ui.theme.AccentGreen,
                             fontWeight = FontWeight.Black,
-                            letterSpacing = 1.sp
+                            fontSize = 12.sp
                         )
                     }
                 }
             }
-        } else if (activeProgramState == null) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp)
-                    .clickable { onNavigateToTab("programs") }
-                    .testTag("onboarding_empty_card"),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = com.example.ui.theme.GlassDark),
-                border = BorderStroke(1.dp, com.example.ui.theme.GlassBorderDark)
+        }
+
+        // Timeline slider header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "PROGRAM TIMELINE",
+                color = com.example.ui.theme.GrayMedium,
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp,
+                letterSpacing = 1.sp
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "🏋️‍♂️ SET UP STRUCTURED SPLIT",
-                        color = Color.White,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 16.sp,
-                        letterSpacing = 1.sp
+                Text(
+                    text = "FREE NAV",
+                    color = if (activeProgramState.freeNavigationEnabled) com.example.ui.theme.AccentGreen else com.example.ui.theme.GrayMedium,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(end = 6.dp)
+                )
+                Switch(
+                    checked = activeProgramState.freeNavigationEnabled,
+                    onCheckedChange = onToggleFreeNav,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = com.example.ui.theme.AccentGreen,
+                        uncheckedThumbColor = Color.LightGray,
+                        uncheckedTrackColor = Color.Black
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "You do not have any active training program. Select one of Jeff Nippard's premium science-based splits in the PROGRAM tab to begin tracking.",
-                        color = com.example.ui.theme.GrayMedium,
-                        fontSize = 12.sp,
-                        lineHeight = 18.sp,
-                        textAlign = TextAlign.Center
-                    )
-                }
+                )
             }
         }
 
-        // 3. Horizontal scroll of quick stats (Streak, Volume, Weeks Left) on SOLID backdrop
-        Text(
-            text = "DASHBOARD ATHLETE METRICS",
-            color = com.example.ui.theme.GrayMedium,
-            fontWeight = FontWeight.Bold,
-            fontSize = 11.sp,
-            letterSpacing = 1.5.sp,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-
+        // Timeline Slider Cards
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
-                .padding(bottom = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Stat 1: Workout Streak
-            Card(
-                modifier = Modifier
-                    .width(130.dp)
-                    .height(90.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF121212)), // Non-translucent solid high-contrast, edge thin margins
-                border = BorderStroke(1.dp, com.example.ui.theme.GlassBorderDark)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(12.dp),
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = "$streakCount DAYS",
-                        color = Color.White,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = (-0.5).sp
-                    )
-                    Text(
-                        text = "RUNNING STREAK",
-                        color = com.example.ui.theme.GrayMedium,
-                        fontSize = 8.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp
-                    )
+            daysList.forEachIndexed { idx, day ->
+                val isSelected = selectedDayIndex == idx
+                val isCompleted = completedMap["week${activeProgramState.currentWeekIndex + 1}_$idx"] == true
+                val isUnlocked = isDayUnlocked(idx, activeProgramState.currentWeekIndex, daysList, completedMap, activeProgramState.freeNavigationEnabled)
+                val dayLabel = when (idx) {
+                    0 -> "MON"
+                    1 -> "TUE"
+                    2 -> "WED"
+                    3 -> "THU"
+                    4 -> "FRI"
+                    5 -> "SAT"
+                    6 -> "SUN"
+                    else -> "D${idx + 1}"
                 }
-            }
 
-            // Stat 2: Week volume
-            Card(
-                modifier = Modifier
-                    .width(160.dp)
-                    .height(90.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF121212)),
-                border = BorderStroke(1.dp, com.example.ui.theme.GlassBorderDark)
-            ) {
-                Column(
+                Card(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(12.dp),
-                    verticalArrangement = Arrangement.Center
+                        .width(96.dp)
+                        .clickable {
+                            if (isUnlocked) {
+                                onSelectDayIndex(idx)
+                            } else {
+                                Toast
+                                    .makeText(
+                                        context,
+                                        "LOCKED: Complete prior workouts to progress, or enable FREE NAV!",
+                                        Toast.LENGTH_SHORT
+                                    )
+                                    .show()
+                            }
+                        },
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isSelected) com.example.ui.theme.GlassLight else if (isCompleted) Color(0x3300FF66) else if (!isUnlocked) Color(0x11FFFFFF) else com.example.ui.theme.GrayDark
+                    ),
+                    border = BorderStroke(
+                        width = if (isSelected) 2.dp else 1.dp,
+                        color = if (isSelected) com.example.ui.theme.AccentGreen else if (isCompleted) com.example.ui.theme.AccentGreen.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.12f)
+                    )
                 ) {
-                    Text(
-                        text = "${thisWeekVolume.toInt()} KG",
-                        color = com.example.ui.theme.AccentGreen,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = (-0.5).sp
-                    )
-                    Text(
-                        text = "WEEK'S TOTAL VOLUME",
-                        color = com.example.ui.theme.GrayMedium,
-                        fontSize = 8.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp
-                    )
-                }
-            }
-
-            // Stat 3: Program Weeks left
-            Card(
-                modifier = Modifier
-                    .width(130.dp)
-                    .height(90.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF121212)),
-                border = BorderStroke(1.dp, com.example.ui.theme.GlassBorderDark)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(12.dp),
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    val remainingWeeks = if (activeProgramState != null) 12 - activeProgramState!!.currentWeekIndex else 12
-                    Text(
-                        text = "$remainingWeeks WEEKS",
-                        color = Color.White,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = (-0.5).sp
-                    )
-                    Text(
-                        text = "PROGRAM LEFT",
-                        color = com.example.ui.theme.GrayMedium,
-                        fontSize = 8.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp
-                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp, horizontal = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(dayLabel, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = if (isSelected) Color.White else com.example.ui.theme.GrayMedium)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        
+                        // Status indicators (Icon: Check, Lock, or Target Muscle)
+                        if (isCompleted) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = "Completed", tint = com.example.ui.theme.AccentGreen, modifier = Modifier.size(18.dp))
+                        } else if (!isUnlocked) {
+                            Icon(Icons.Default.Lock, contentDescription = "Locked", tint = Color.Gray, modifier = Modifier.size(18.dp))
+                        } else if (day.isRestDay) {
+                            Icon(Icons.Default.Favorite, contentDescription = "Rest", tint = Color.LightGray, modifier = Modifier.size(18.dp))
+                        } else {
+                            val abbreviation = if (day.dayName.contains("Upper")) "UPP" else if (day.dayName.contains("Lower")) "LOW" else "WKT"
+                            Text(abbreviation, fontWeight = FontWeight.Black, fontSize = 12.sp, color = Color.White)
+                        }
+                    }
                 }
             }
         }
 
-        // 4. Recently completed workout summary card
-        if (recentWorkout != null) {
+        // Target day overview box
+        val selectedDay = daysList.getOrNull(selectedDayIndex)
+        if (selectedDay != null) {
             Text(
-                text = "RECENT COMPLETED WORKOUT LOG",
+                text = "SELECTED DAY DETAILS",
                 color = com.example.ui.theme.GrayMedium,
                 fontWeight = FontWeight.Bold,
                 fontSize = 11.sp,
-                letterSpacing = 1.5.sp,
+                letterSpacing = 1.sp,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
-            
+
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 20.dp)
-                    .testTag("recent_workout_summary_card"),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF121212)), // Solid high-contrast
+                    .padding(bottom = 16.dp),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = com.example.ui.theme.GlassDark),
                 border = BorderStroke(1.dp, com.example.ui.theme.GlassBorderDark)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    val dateFormatted = SimpleDateFormat("EEEE, MMM d, yyyy", Locale.getDefault()).format(Date(recentWorkout!!.date)).uppercase()
-                    
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = (recentWorkout!!.templateName ?: "AD-HOC WORKOUT").uppercase(),
+                            text = selectedDay.dayName.uppercase(),
+                            fontSize = 20.sp,
                             fontWeight = FontWeight.Black,
-                            fontSize = 18.sp,
                             color = Color.White
                         )
-                        
-                        if (recentPrs.isNotEmpty()) {
+                        if (completedMap["week${activeProgramState.currentWeekIndex + 1}_$selectedDayIndex"] == true) {
                             Box(
                                 modifier = Modifier
-                                    .background(Color.White, RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    .background(com.example.ui.theme.AccentGreen.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
-                                Text(
-                                    text = "🔥 ${recentPrs.size} PR",
-                                    color = Color.Black,
-                                    fontSize = 8.sp,
-                                    fontWeight = FontWeight.Black
-                                )
+                                Text("COMPLETED", color = com.example.ui.theme.AccentGreen, fontSize = 10.sp, fontWeight = FontWeight.Black)
                             }
                         }
                     }
-                    
-                    Text(
-                        text = dateFormatted, 
-                        color = com.example.ui.theme.GrayMedium, 
-                        fontSize = 11.sp, 
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp
-                    )
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Column {
-                            Text("${recentWorkout!!.totalVolume.toInt()} KG", fontWeight = FontWeight.Black, fontSize = 22.sp, color = Color.White)
-                            Text("VOLUME PRESSED", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = com.example.ui.theme.GrayMedium, letterSpacing = 1.sp)
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text("${recentWorkout!!.durationMinutes} MINS", fontWeight = FontWeight.Black, fontSize = 22.sp, color = Color.White)
-                            Text("DURATION MINUTES", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = com.example.ui.theme.GrayMedium, letterSpacing = 1.sp)
-                        }
-                    }
 
-                    if (recentPrs.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    if (selectedDay.isRestDay) {
+                        // Recovery Section
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Favorite, contentDescription = null, tint = com.example.ui.theme.AccentGreen, modifier = Modifier.padding(end = 8.dp))
+                            Text("RECOVERY & MOBILITY DAY HUB", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "⭐ PERSONAL RECORDS SET:",
-                            color = com.example.ui.theme.AccentGreen,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 0.5.sp
+                            text = "Today is your designated Recovery and growth window. Saturday and Sunday are first-class recovery entities in this ecosystem.\n\n" +
+                                    "✨ RECOVERY CUES:\n" +
+                                    "• Mobility Work: Perform 10-15 mins of dynamic active stretches (Arm circles, Front-to-back swings, dynamic hips).\n" +
+                                    "• Optional Cardio: Low-intensity steady-state (LISS) cardio (Elliptical, brisk walk) for 20-30 mins to flush lactic pooling.\n" +
+                                    "• Growth Protocol: Rest target musculature. Drink optimal fluids and maintain caloric intake variables.",
+                            fontSize = 12.sp,
+                            lineHeight = 18.sp,
+                            color = Color.LightGray
                         )
-                        recentPrs.forEach { pr ->
-                            Text(
-                                text = "• " + pr.exerciseId.uppercase().replace("_", " "),
-                                color = Color.White,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                    } else {
+                        // Exercises listing
+                        Text(
+                            "EXERCISES (${selectedDay.exercises.size})",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = com.example.ui.theme.GrayMedium,
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        // Exercises column
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            selectedDay.exercises.forEachIndexed { i, ex ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
+                                        .padding(8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(ex.name, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp)
+                                        Text(
+                                            "Target sets: ${ex.workingSets ?: "3"} • reps: ${ex.reps ?: ex.repRange ?: "10"}",
+                                            fontSize = 11.sp,
+                                            color = com.example.ui.theme.GrayMedium
+                                        )
+                                    }
+                                    if (ex.videoUrl != null) {
+                                        Icon(
+                                            Icons.Default.PlayArrow,
+                                            contentDescription = "Demo available",
+                                            tint = Color.Red,
+                                            modifier = Modifier
+                                                .size(20.dp)
+                                                .clickable { uriHandler.openUri(ex.videoUrl!!) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Trigger actions
+                        if (activeWorkout != null) {
+                            Button(
+                                onClick = onResumeWorkout,
+                                colors = ButtonDefaults.buttonColors(containerColor = com.example.ui.theme.AccentGreen, contentColor = Color.White),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth().height(48.dp)
+                            ) {
+                                Text("RESUME ACTIVE WORKOUT Session 🔄", fontWeight = FontWeight.Black)
+                            }
+                        } else {
+                            val btnLabel = if (completedMap["week${activeProgramState.currentWeekIndex + 1}_$selectedDayIndex"] == true) "RESTART WORKOUT" else "START WORKOUT: ${selectedDay.dayName.uppercase()} 🔥"
+                            Button(
+                                onClick = {
+                                    val newW = selectedDay.toWorkout("week${activeProgramState.currentWeekIndex + 1}", selectedDayIndex)
+                                    onStartWorkout(newW)
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth().height(48.dp)
+                            ) {
+                                Text(btnLabel, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
             }
         }
 
-        // Two side-by-side shortcut navigation link cards (Progress & PRs tabs)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
+        // Week complete summary module
+        if (isWeekCompleted) {
             Card(
                 modifier = Modifier
-                    .weight(1f)
-                    .height(76.dp)
-                    .clickable { onNavigateToTab("progress") },
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = com.example.ui.theme.GlassDark),
-                border = BorderStroke(1.dp, com.example.ui.theme.GlassBorderDark)
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = com.example.ui.theme.AccentGreen.copy(alpha = 0.12f)),
+                border = BorderStroke(1.dp, com.example.ui.theme.AccentGreen.copy(alpha = 0.5f))
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Column {
-                        Text("PROGRESS", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black)
-                        Text("ANALYTIC CHARTS", color = com.example.ui.theme.GrayMedium, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        "🎉 WEEK COMPLETED SUMMARY!",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Black,
+                        color = com.example.ui.theme.AccentGreen
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Outstanding commitment! You successfully checked off all active training days scheduled for Week ${activeProgramState.currentWeekIndex + 1} with absolute precision.\n\n" +
+                                "📊 WEEK STATS:\n" +
+                                "• Total Completed: $totalWorkoutsThisWeek / $totalWorkoutsThisWeek \n" +
+                                "• Focus blocks: Foundation Block\n" +
+                                "• Intensity parameters: Maximum intensity threshold",
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp,
+                        color = Color.LightGray,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    if (activeProgramState.currentWeekIndex + 1 < program.weeks.size) {
+                        Button(
+                            onClick = onUnlockNextWeek,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = com.example.ui.theme.AccentGreen, contentColor = Color.White),
+                            modifier = Modifier.fillMaxWidth().height(44.dp)
+                        ) {
+                            Text("UNLOCK WEEK ${activeProgramState.currentWeekIndex + 2} / NEXT BLOCK 🚀", fontWeight = FontWeight.Black)
+                        }
+                    } else {
+                        Text(
+                            "🎓 ALL BLOCKS FINISHED SUCCESSFULLY!",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Black,
+                            color = com.example.ui.theme.AccentGreen,
+                            modifier = Modifier.padding(8.dp)
+                        )
                     }
-                    Icon(imageVector = Icons.Default.KeyboardArrowRight, contentDescription = null, tint = Color.White)
-                }
-            }
-
-            Card(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(76.dp)
-                    .clickable { onNavigateToTab("prs") },
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = com.example.ui.theme.GlassDark),
-                border = BorderStroke(1.dp, com.example.ui.theme.GlassBorderDark)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text("PR TROPHIES", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black)
-                        Text("HALL OF FAME", color = com.example.ui.theme.GrayMedium, fontSize = 8.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Icon(imageVector = Icons.Default.KeyboardArrowRight, contentDescription = null, tint = Color.White)
                 }
             }
         }
 
-        // 5. Secondary "Start ad-hoc custom workout" link
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 12.dp),
-            contentAlignment = Alignment.Center
+        // Metrics Grid Layout
+        Text(
+            text = "DASHBOARD PERFORMANCE METRICS",
+            color = com.example.ui.theme.GrayMedium,
+            fontWeight = FontWeight.Bold,
+            fontSize = 11.sp,
+            letterSpacing = 1.sp,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                text = "START AD-HOC CUSTOM WORKOUT",
-                color = com.example.ui.theme.GrayMedium,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp,
+            // Stat 1: streak
+            Card(
                 modifier = Modifier
-                    .background(com.example.ui.theme.GlassDark, RoundedCornerShape(8.dp))
-                    .border(1.dp, com.example.ui.theme.GlassBorderDark, RoundedCornerShape(8.dp))
-                    .clickable { onStartWorkout(null) }
-                    .padding(horizontal = 16.dp, vertical = 10.dp)
-                    .testTag("start_ad_hoc_workout")
-            )
+                    .weight(1f)
+                    .height(90.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF121212)),
+                border = BorderStroke(1.dp, com.example.ui.theme.GlassBorderDark)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(Icons.Filled.Star, contentDescription = null, tint = Color.Yellow, modifier = Modifier.size(20.dp))
+                    Text(text = "$currentStreak DAYS", fontWeight = FontWeight.Black, fontSize = 18.sp, color = Color.White)
+                    Text(text = "CURRENT STREAK", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = com.example.ui.theme.GrayMedium)
+                }
+            }
+
+            // Stat 2: volume
+            Card(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(90.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF121212)),
+                border = BorderStroke(1.dp, com.example.ui.theme.GlassBorderDark)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(Icons.Filled.Timeline, contentDescription = null, tint = com.example.ui.theme.AccentGreen, modifier = Modifier.size(20.dp))
+                    Text(text = if (weeklyVolume > 0) "${weeklyVolume.toInt()} KG" else "0 KG", fontWeight = FontWeight.Black, fontSize = 18.sp, color = Color.White)
+                    Text(text = "7-DAY VOLUME", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = com.example.ui.theme.GrayMedium)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Stat 3: days completed
+            Card(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(90.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF121212)),
+                border = BorderStroke(1.dp, com.example.ui.theme.GlassBorderDark)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(Icons.Filled.ThumbUp, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                    Text(text = "$totalCompletedDays WORKOUTS", fontWeight = FontWeight.Black, fontSize = 16.sp, color = Color.White)
+                    Text(text = "COMPLETED TOTAL", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = com.example.ui.theme.GrayMedium)
+                }
+            }
+
+            // Stat 4: newest PR
+            Card(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(90.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF121212)),
+                border = BorderStroke(1.dp, com.example.ui.theme.GlassBorderDark)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = com.example.ui.theme.AccentGreen, modifier = Modifier.size(20.dp))
+                    val valText = if (newestPR != null) "${newestPR.value.toInt()} KG" else "NONE SET"
+                    Text(text = valText, fontWeight = FontWeight.Black, fontSize = 16.sp, color = Color.White)
+                    Text(text = "MOST RECENT PR", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = com.example.ui.theme.GrayMedium)
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(60.dp))
     }
+}
 
-    // --- POPUP WARM UP DIALOG ---
-    if (showWarmupDialog) {
-        AlertDialog(
-            onDismissRequest = { showWarmupDialog = false },
-            containerColor = Color.Black,
-            titleContentColor = Color.White,
-            textContentColor = Color.White,
-            shape = RoundedCornerShape(20.dp),
-            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-                .border(2.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(20.dp)),
-            title = {
-                Text(
-                    text = "🏆 GENERAL WARM UP PROTOCOL",
-                    fontWeight = FontWeight.Black,
-                    fontSize = 20.sp,
-                    letterSpacing = 1.sp
-                )
-            },
-            text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
-                ) {
-                    // Step 1: Cardio
-                    Text(
-                        text = "STAGE 1: LIGHT CARDIO",
-                        color = com.example.ui.theme.AccentGreen,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 12.sp,
-                        letterSpacing = 1.sp
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color(0xFF141414), RoundedCornerShape(8.dp))
-                            .padding(10.dp)
-                    ) {
-                        Text(
-                            text = "Perform 5 to 10 minutes of low-intensity cardio (treadmill walk, exercise bike, or row machine) to raise core body temperature and increase blood flow to target muscles.",
-                            color = Color.White.copy(alpha = 0.85f),
-                            fontSize = 12.sp,
-                            lineHeight = 16.sp
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Step 2: Dynamic stretches
-                    Text(
-                        text = "STAGE 2: DYNAMIC STRETCHES (10-15 REPS EACH)",
-                        color = com.example.ui.theme.AccentGreen,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 12.sp,
-                        letterSpacing = 1.sp
-                    )
-                    Text(
-                        text = "Active stretching to lubricate joints and prepare dynamic movement patterns. Tap the demo link next to each sequence to watch form details.",
-                        color = com.example.ui.theme.GrayMedium,
-                        fontSize = 10.sp,
-                        modifier = Modifier.padding(bottom = 6.dp)
-                    )
-
-                    val sequences = listOf(
-                        Triple("Arm Swings", "Controlled horizontal and vertical arm swings to release the chest and shoulders.", "https://www.youtube.com/watch?v=330c9462u1w"),
-                        Triple("Arm Circles", "Slow circles starting small and increasing radius to warm up rotator cuffs.", "https://www.youtube.com/watch?v=1b-bIatLdZ4"),
-                        Triple("Front-to-Back Leg Swings", "Swing each leg back and forth dynamically while maintaining posture.", "https://www.youtube.com/watch?v=yW6WstYc4gM"),
-                        Triple("Side-to-Side Leg Swings", "Swing leg across body to release hips, abductors, and groin.", "https://www.youtube.com/watch?v=eB22-Xm8X3E"),
-                        Triple("Cable External Rotation", "Very light rotational resistance to prepare delicate shoulder stability.", "https://www.youtube.com/watch?v=a8I1bUf9OaY")
-                    )
-
-                    sequences.forEach { (name, desc, url) ->
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 6.dp)
-                                .background(Color(0xFF141414), RoundedCornerShape(10.dp))
-                                .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(10.dp))
-                                .padding(10.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = name.uppercase(),
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp
-                                )
-                                Button(
-                                    onClick = { uriHandler.openUri(url) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
-                                    shape = RoundedCornerShape(6.dp),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                    modifier = Modifier.height(28.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.PlayArrow,
-                                        contentDescription = "Watch",
-                                        modifier = Modifier.size(12.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("WATCH DEMO", fontSize = 9.sp, fontWeight = FontWeight.Black)
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = desc,
-                                color = Color.White.copy(alpha = 0.7f),
-                                fontSize = 11.sp,
-                                lineHeight = 15.sp
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = { showWarmupDialog = false },
-                    colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
-                ) {
-                    Text("DONE", fontWeight = FontWeight.Black)
-                }
-            }
-        )
+fun isDayUnlocked(dayIdx: Int, weekIndex: Int, daysList: List<ProgramDay>, completedMap: Map<String, Boolean>, freeNav: Boolean): Boolean {
+    if (freeNav) return true
+    if (dayIdx == 0) return true
+    
+    // Find the immediately preceding non-rest day
+    for (i in dayIdx - 1 downTo 0) {
+        val d = daysList[i]
+        if (d.isRestDay) continue
+        return completedMap["week${weekIndex + 1}_$i"] == true
     }
+    return true
 }

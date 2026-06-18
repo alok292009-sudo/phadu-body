@@ -35,6 +35,9 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.withTimeoutOrNull
+import android.util.Log
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
@@ -49,37 +52,115 @@ import kotlinx.coroutines.launch
 @Composable
 fun IronLogApp(repository: IronLogRepository) {
     val navController = rememberNavController()
+    val auth = remember { FirebaseAuth.getInstance() }
+    var isInitialized by remember { mutableStateOf(false) }
+    var startDestination by remember { mutableStateOf("login") }
 
-    NavHost(
-        navController = navController,
-        startDestination = "main",
-        modifier = Modifier
-    ) {
-        composable("login") {
-            LoginScreen(
-                onLoginSuccess = {
-                    navController.navigate("main") {
-                        popUpTo("login") { inclusive = true }
-                    }
-                }
-            )
-        }
-        composable("main") {
-            ProtectedRoute(navController = navController) {
-                MainScreenWrapper(repository, navController)
+    LaunchedEffect(Unit) {
+        Log.d("IronLogApp", "=== APP STARTUP SEQUENCE INITIATED ===")
+        try {
+            // Step 1: Initialize / access Firebase App references
+            Log.d("IronLogApp", "Step 1: Referencing Firebase Application runtime setup...")
+            val app = auth.app
+            
+            // Step 2: Verify Firebase initialization
+            Log.d("IronLogApp", "Step 2: Verifying Firebase application instance active: name=${app.name}")
+            if (app.name.isEmpty()) {
+                throw IllegalStateException("Firebase instance has dry namespace execution!")
             }
+            
+            // Step 3: Verify Auth initialization and config
+            Log.d("IronLogApp", "Step 3: Verifying FirebaseAuth provider bounds...")
+            if (auth.app != app) {
+                throw IllegalStateException("Firebase Authentication is disassociated from active Firebase App!")
+            }
+            
+            // Step 4: Check current user session status
+            val currentUser = auth.currentUser
+            Log.d("IronLogApp", "Step 4: Resolved session status. Auth user UID: ${currentUser?.uid ?: "Null (Anonymous/Logged-out)"}")
+            
+            if (currentUser != null) {
+                // Step 5: Load user profile with a 1.2s safety boundary to avoid suspending indefinitely on offline listener state
+                Log.d("IronLogApp", "Step 5: Loading user profile metadata from local fallback or cache channel...")
+                try {
+                    withTimeoutOrNull(1200L) {
+                        repository.getUserProfile().firstOrNull()
+                    }
+                    Log.d("IronLogApp", "User profile payload retrieved or falling back safely")
+                } catch (e: Exception) {
+                    Log.w("IronLogApp", "User profile retrieval warning during startup sequence: ${e.message}")
+                }
+                
+                // Step 6: Load active program telemetry state with a 1.2s timeout
+                Log.d("IronLogApp", "Step 6: Loading workout programs state vectors...")
+                try {
+                    withTimeoutOrNull(1200L) {
+                        repository.getActiveProgramState().firstOrNull()
+                    }
+                    Log.d("IronLogApp", "Program state vectors retrieved or falling back safely")
+                } catch (e: Exception) {
+                    Log.w("IronLogApp", "Program state retrieval warning during startup sequence: ${e.message}")
+                }
+                
+                // Step 7: Decide output routing and execute navigate destination Choice
+                Log.d("IronLogApp", "Step 7: Executing startup navigation choice -> main dashboard screen")
+                startDestination = "main"
+            } else {
+                Log.d("IronLogApp", "Step 5: Skipping profile metadata (Signed Out)")
+                Log.d("IronLogApp", "Step 6: Skipping program state (Signed Out)")
+                Log.d("IronLogApp", "Step 7: Executing startup navigation choice -> landing credentials screen")
+                startDestination = "login"
+            }
+        } catch (e: Exception) {
+            Log.e("IronLogApp", "CRITICAL: Firebase Auth startup sequence interrupted: ${e.localizedMessage}", e)
+            startDestination = "login" // Fallback safety route
+        } finally {
+            Log.d("IronLogApp", "=== APP STARTUP SEQUENCE COMPLETED ===")
+            isInitialized = true
         }
-        composable("active_workout") {
-            ProtectedRoute(navController = navController) {
-                ActiveWorkoutScreen(
-                    repository = repository,
-                    onFinish = {
-                        navController.popBackStack()
-                    },
-                    onBack = {
-                        navController.popBackStack()
+    }
+
+    if (!isInitialized) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator(color = Color.White)
+        }
+    } else {
+        NavHost(
+            navController = navController,
+            startDestination = startDestination,
+            modifier = Modifier
+        ) {
+            composable("login") {
+                LoginScreen(
+                    onLoginSuccess = {
+                        navController.navigate("main") {
+                            popUpTo("login") { inclusive = true }
+                        }
                     }
                 )
+            }
+            composable("main") {
+                ProtectedRoute(navController = navController) {
+                    MainScreenWrapper(repository, navController)
+                }
+            }
+            composable("active_workout") {
+                ProtectedRoute(navController = navController) {
+                    ActiveWorkoutScreen(
+                        repository = repository,
+                        onFinish = {
+                            navController.popBackStack()
+                        },
+                        onBack = {
+                            navController.popBackStack()
+                        }
+                    )
+                }
             }
         }
     }
@@ -90,9 +171,26 @@ fun ProtectedRoute(
     navController: NavHostController,
     content: @Composable () -> Unit
 ) {
-    // If the user navigates past the login screen (e.g. bypass), let them stay on main.
-    // The repository defaults to 'local_test_user'.
-    content()
+    val auth = remember { FirebaseAuth.getInstance() }
+    val currentUser = auth.currentUser
+    
+    if (currentUser == null) {
+        LaunchedEffect(Unit) {
+            navController.navigate("login") {
+                popUpTo(0) { inclusive = true }
+            }
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator(color = Color.White)
+        }
+    } else {
+        content()
+    }
 }
 
 @Composable
@@ -107,7 +205,8 @@ fun MainScreenWrapper(
         Triple("programs", Icons.Outlined.Star, "PROGRAM"),
         Triple("progress", Icons.Outlined.Timeline, "PROGRESS"),
         Triple("prs", Icons.Filled.Star, "PRS"),
-        Triple("history", Icons.Outlined.History, "HISTORY")
+        Triple("history", Icons.Outlined.History, "HISTORY"),
+        Triple("profile", Icons.Outlined.Person, "PROFILE")
     )
 
     Scaffold(
@@ -188,29 +287,9 @@ fun MainScreenWrapper(
                 val auth = FirebaseAuth.getInstance()
                 HomeScreen(
                     repository = repository,
-                    onStartWorkout = { templateId ->
+                    onStartWorkout = { generatedWorkout ->
                         coroutineScope.launch {
-                            var newWorkout = com.example.model.Workout()
-                            if (templateId != null) {
-                                val templates = repository.getTemplates().first { it.isNotEmpty() }
-                                val template = templates.find { it.id == templateId }
-                                if (template != null) {
-                                    val loggedExercises = template.exercises.map { tex ->
-                                        com.example.model.LoggedExercise(
-                                            exerciseId = tex.exerciseId,
-                                            exerciseName = tex.exerciseName,
-                                            videoUrl = tex.videoUrl,
-                                            sets = List(tex.targetSets) { com.example.model.WorkoutSet(reps = tex.targetReps) }
-                                        )
-                                    }
-                                    newWorkout = newWorkout.copy(
-                                        templateId = template.id,
-                                        templateName = template.name,
-                                        loggedExercises = loggedExercises
-                                    )
-                                }
-                            }
-                            repository.saveWorkout(newWorkout)
+                            repository.saveWorkout(generatedWorkout)
                             rootNavController.navigate("active_workout")
                         }
                     },

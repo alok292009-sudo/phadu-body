@@ -33,15 +33,47 @@ class SharedPrefsIronLogRepository(context: Context) : IronLogRepository {
         val apJson = prefs.getString("active_program", null)
         val upJson = prefs.getString("user_profile", null)
 
-        templatesState.value = moshi.adapter<List<Template>>(Types.newParameterizedType(List::class.java, Template::class.java)).fromJson(tJson ?: "[]") ?: emptyList()
-        workoutsState.value = moshi.adapter<List<Workout>>(Types.newParameterizedType(List::class.java, Workout::class.java)).fromJson(wJson ?: "[]") ?: emptyList()
-        exercisesState.value = moshi.adapter<List<Exercise>>(Types.newParameterizedType(List::class.java, Exercise::class.java)).fromJson(eJson ?: "[]") ?: emptyList()
-        prsState.value = moshi.adapter<List<PersonalRecord>>(Types.newParameterizedType(List::class.java, PersonalRecord::class.java)).fromJson(pJson ?: "[]") ?: emptyList()
+        templatesState.value = try {
+            moshi.adapter<List<Template>>(Types.newParameterizedType(List::class.java, Template::class.java)).fromJson(tJson ?: "[]") ?: emptyList()
+        } catch (e: Exception) {
+            Log.e("SharedPrefsRepo", "Error deserializing templates", e)
+            emptyList()
+        }
+
+        workoutsState.value = try {
+            moshi.adapter<List<Workout>>(Types.newParameterizedType(List::class.java, Workout::class.java)).fromJson(wJson ?: "[]") ?: emptyList()
+        } catch (e: Exception) {
+            Log.e("SharedPrefsRepo", "Error deserializing workouts", e)
+            emptyList()
+        }
+
+        exercisesState.value = try {
+            moshi.adapter<List<Exercise>>(Types.newParameterizedType(List::class.java, Exercise::class.java)).fromJson(eJson ?: "[]") ?: emptyList()
+        } catch (e: Exception) {
+            Log.e("SharedPrefsRepo", "Error deserializing exercises", e)
+            emptyList()
+        }
+
+        prsState.value = try {
+            moshi.adapter<List<PersonalRecord>>(Types.newParameterizedType(List::class.java, PersonalRecord::class.java)).fromJson(pJson ?: "[]") ?: emptyList()
+        } catch (e: Exception) {
+            Log.e("SharedPrefsRepo", "Error deserializing prs", e)
+            emptyList()
+        }
+
         if (apJson != null) {
-            activeProgramStateFlow.value = moshi.adapter(ActiveProgramState::class.java).fromJson(apJson)
+            try {
+                activeProgramStateFlow.value = moshi.adapter(ActiveProgramState::class.java).fromJson(apJson)
+            } catch (e: Exception) {
+                Log.e("SharedPrefsRepo", "Error deserializing active_program", e)
+            }
         }
         if (upJson != null) {
-            userProfileState.value = moshi.adapter(UserProfile::class.java).fromJson(upJson)
+            try {
+                userProfileState.value = moshi.adapter(UserProfile::class.java).fromJson(upJson)
+            } catch (e: Exception) {
+                Log.e("SharedPrefsRepo", "Error deserializing user_profile", e)
+            }
         }
     }
 
@@ -131,14 +163,79 @@ class SharedPrefsIronLogRepository(context: Context) : IronLogRepository {
     }
 
     override suspend fun finishWorkout(workout: Workout) {
-        val completedWorkout = workout.copy(status = "completed")
+        var totalVolume = 0.0
+        workout.loggedExercises.forEach { ex ->
+            ex.sets.filter { !it.isWarmup }.forEach { set ->
+                totalVolume += set.weight * set.reps
+            }
+        }
+        val id = if (workout.id.isEmpty()) UUID.randomUUID().toString() else workout.id
+        val completedWorkout = workout.copy(id = id, status = "completed", totalVolume = totalVolume)
         saveWorkout(completedWorkout)
+
+        // Update local PRs
+        val prsList = prsState.value.toMutableList()
+        for (ex in completedWorkout.loggedExercises) {
+            var exBestWeight = 0.0
+            var exBestWeightReps = 0
+            var exBestVolume = 0.0
+            var exBestVolumeReps = 0
+            var exBestE1rm = 0.0
+            var exBestE1rmReps = 0
+            
+            ex.sets.filter { !it.isWarmup }.forEach { set ->
+                val setVolume = set.weight * set.reps
+                val e1rm = set.weight * (1.0 + set.reps / 30.0)
+                
+                if (set.weight > exBestWeight) { exBestWeight = set.weight; exBestWeightReps = set.reps }
+                if (setVolume > exBestVolume) { exBestVolume = setVolume; exBestVolumeReps = set.reps }
+                if (e1rm > exBestE1rm) { exBestE1rm = e1rm; exBestE1rmReps = set.reps }
+            }
+            
+            if (exBestWeight > 0) {
+                val currentPr = prsList.find { it.exerciseId == ex.exerciseId } ?: PersonalRecord(exerciseId = ex.exerciseId)
+                var newPr = currentPr
+                if (exBestWeight > (currentPr.bestWeight?.value ?: 0.0)) {
+                    newPr = newPr.copy(bestWeight = RecordDetail(exBestWeight, exBestWeightReps, completedWorkout.date, id))
+                }
+                if (exBestVolume > (currentPr.bestVolume?.value ?: 0.0)) {
+                    newPr = newPr.copy(bestVolume = RecordDetail(exBestVolume, exBestVolumeReps, completedWorkout.date, id))
+                }
+                if (exBestE1rm > (currentPr.bestEstimated1RM?.value ?: 0.0)) {
+                    newPr = newPr.copy(bestEstimated1RM = RecordDetail(exBestE1rm, exBestE1rmReps, completedWorkout.date, id))
+                }
+                if (newPr != currentPr) {
+                    prsList.removeAll { it.exerciseId == ex.exerciseId }
+                    prsList.add(newPr)
+                }
+            }
+        }
+        prsState.value = prsList
+        savePrs()
         
         // Update active program state if this workout belongs to a template
         if (workout.templateId != null) {
             val state = activeProgramStateFlow.value
             if (state != null) {
+                val newCompletedMap = state.completedWorkoutsMap.toMutableMap()
+                newCompletedMap[workout.templateId] = true
+
+                val parts = workout.templateId.split("_")
+                val dayIndex = if (parts.size == 2) parts[1].toIntOrNull() else null
+                
+                val nextDayIndex = if (dayIndex != null) {
+                    if (dayIndex == state.currentDayIndex) {
+                        (dayIndex + 1).coerceAtMost(6)
+                    } else {
+                        state.currentDayIndex
+                    }
+                } else {
+                    state.currentDayIndex
+                }
+
                 val newState = state.copy(
+                    completedWorkoutsMap = newCompletedMap,
+                    currentDayIndex = nextDayIndex,
                     workoutsCompletedThisWeek = state.workoutsCompletedThisWeek + 1
                 )
                 if (newState.workoutsCompletedThisWeek >= newState.totalWorkoutsThisWeek) {

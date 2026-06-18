@@ -23,6 +23,17 @@ class FirebaseIronLogRepository(private val context: Context) : IronLogRepositor
     private val auth by lazy { FirebaseAuth.getInstance() }
     private val firestore by lazy { FirebaseFirestore.getInstance() }
     
+    init {
+        try {
+            val settings = com.google.firebase.firestore.FirebaseFirestoreSettings.Builder()
+                .setPersistenceEnabled(true)
+                .build()
+            firestore.firestoreSettings = settings
+        } catch (e: Exception) {
+            Log.e("FirebaseRepo", "Failed to configure Firestore offline persistence", e)
+        }
+    }
+    
     private val localFallback by lazy {
         SharedPrefsIronLogRepository(context)
     }
@@ -46,7 +57,14 @@ class FirebaseIronLogRepository(private val context: Context) : IronLogRepositor
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {
-                    val exercises = snapshot.documents.mapNotNull { it.toObject(Exercise::class.java) }
+                    val exercises = snapshot.documents.mapNotNull {
+                        try {
+                            it.toObject(Exercise::class.java)
+                        } catch (ex: Exception) {
+                            Log.e("FirebaseRepo", "Error deserializing exercise document", ex)
+                            null
+                        }
+                    }
                     trySend(exercises.sortedBy { it.name })
                 }
             }
@@ -55,14 +73,15 @@ class FirebaseIronLogRepository(private val context: Context) : IronLogRepositor
     }
 
     override suspend fun addExercise(exercise: Exercise) {
+        val id = if (exercise.id.isEmpty()) UUID.randomUUID().toString() else exercise.id
+        val finalExercise = exercise.copy(id = id)
+        localFallback.addExercise(finalExercise)
         if (auth.currentUser == null) {
-            localFallback.addExercise(exercise)
             return
         }
         try {
             val col = exercisesCollection()
-            val id = if (exercise.id.isEmpty()) UUID.randomUUID().toString() else exercise.id
-            col.document(id).set(exercise.copy(id = id)).await()
+            col.document(id).set(finalExercise).await()
         } catch (e: Exception) {
             Log.e("FirebaseRepo", "Error adding exercise", e)
         }
@@ -175,14 +194,15 @@ class FirebaseIronLogRepository(private val context: Context) : IronLogRepositor
     }
 
     override suspend fun saveTemplate(template: Template) {
-        localFallback.saveTemplate(template)
+        val id = if (template.id.isEmpty()) UUID.randomUUID().toString() else template.id
+        val finalTemplate = template.copy(id = id)
+        localFallback.saveTemplate(finalTemplate)
         if (auth.currentUser == null) {
             return
         }
         try {
             val col = templatesCollection()
-            val id = if (template.id.isEmpty()) UUID.randomUUID().toString() else template.id
-            col.document(id).set(template.copy(id = id)).await()
+            col.document(id).set(finalTemplate).await()
         } catch (e: Exception) {
             Log.e("FirebaseRepo", "Error saving template", e)
         }
@@ -541,7 +561,14 @@ class FirebaseIronLogRepository(private val context: Context) : IronLogRepositor
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {
-                    val prs = snapshot.documents.mapNotNull { it.toObject(PersonalRecord::class.java) }
+                    val prs = snapshot.documents.mapNotNull {
+                        try {
+                            it.toObject(PersonalRecord::class.java)
+                        } catch (ex: Exception) {
+                            Log.e("FirebaseRepo", "Error parsing personal record", ex)
+                            null
+                        }
+                    }
                     trySend(prs)
                 }
             }
@@ -559,7 +586,12 @@ class FirebaseIronLogRepository(private val context: Context) : IronLogRepositor
                     return@addSnapshotListener
                 }
                 if (snapshot != null && snapshot.exists()) {
-                    trySend(snapshot.toObject(PersonalRecord::class.java))
+                    try {
+                        trySend(snapshot.toObject(PersonalRecord::class.java))
+                    } catch (ex: Exception) {
+                        Log.e("FirebaseRepo", "Error parsing specific personal record", ex)
+                        trySend(null)
+                    }
                 } else {
                     trySend(null)
                 }
@@ -586,11 +618,15 @@ class FirebaseIronLogRepository(private val context: Context) : IronLogRepositor
                         return@addSnapshotListener
                     }
                     if (snapshot != null && snapshot.exists()) {
-                        val state = snapshot.toObject(ActiveProgramState::class.java)
-                        launch {
-                            localFallback.saveActiveProgramState(state)
+                        try {
+                            val state = snapshot.toObject(ActiveProgramState::class.java)
+                            launch {
+                                localFallback.saveActiveProgramState(state)
+                            }
+                            trySend(state)
+                        } catch (ex: Exception) {
+                            Log.e("FirebaseRepo", "Error deserializing active program state", ex)
                         }
-                        trySend(state)
                     } else {
                         launch {
                             localFallback.saveActiveProgramState(null)
