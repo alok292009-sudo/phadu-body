@@ -272,4 +272,81 @@ object ProgramValidator {
             weeks = sanitizedWeeks
         )
     }
+
+    /**
+     * Strictly validates a Program structure for incomplete keys.
+     * Checks if all expected keys ('muscleGroup', 'substitution1', and 'substitution2')
+     * are explicitly present, non-null, and non-blank on exercises belonging to active training days.
+     * Returns a list of validation error descriptions. If the list is empty, the program is valid.
+     */
+    fun validateStrict(program: Program?): List<String> {
+        val errors = mutableListOf<String>()
+        if (program == null) {
+            errors.add("Program JSON root is empty or invalid.")
+            return errors
+        }
+
+        if (program.programName.isBlank()) {
+            errors.add("Missing expected key: 'programName' should not be blank.")
+        }
+        if (program.author.isBlank()) {
+            errors.add("Missing expected key: 'author' should not be blank.")
+        }
+        if (program.weeks.isEmpty()) {
+            errors.add("Missing expected key: 'weeks' map is empty or not defined.")
+            return errors
+        }
+
+        program.weeks.forEach { (weekKey, weekObj) ->
+            if (weekObj.block.isBlank() || weekObj.block == "Block") {
+                errors.add("[$weekKey] Missing or invalid expected key: 'block' is not specified.")
+            }
+            if (weekObj.days.isEmpty()) {
+                errors.add("[$weekKey] Missing expected key: 'days' list is empty or not defined.")
+            } else {
+                weekObj.days.forEachIndexed { dayIdx, dayObj ->
+                    val dayLabel = dayObj.dayName.takeIf { it.isNotBlank() } ?: "Day ${dayIdx + 1}"
+                    if (dayObj.dayName.isBlank()) {
+                        errors.add("[$weekKey, Day $dayIdx] Missing expected key: 'dayName' is empty.")
+                    }
+                    if (!dayObj.isRestDay) {
+                        if (dayObj.exercises.isEmpty()) {
+                            errors.add("[$weekKey, $dayLabel] Non-rest day contains zero exercises.")
+                        } else {
+                            dayObj.exercises.forEachIndexed { exIdx, exObj ->
+                                val exLabel = exObj.name.takeIf { it.isNotBlank() } ?: "Exercise ${exIdx + 1}"
+                                if (exObj.name.isBlank()) {
+                                    errors.add("[$weekKey, $dayLabel, Exercise $exIdx] Missing or empty exercise 'name'.")
+                                }
+                                if (exObj.muscleGroup == null || exObj.muscleGroup.isBlank()) {
+                                    errors.add("[$weekKey, $dayLabel, $exLabel] Missing expected key: 'muscleGroup' is null or blank.")
+                                }
+                                if (exObj.substitution1 == null) {
+                                    errors.add("[$weekKey, $dayLabel, $exLabel] Missing expected key: 'substitution1' is missing or null.")
+                                } else {
+                                    if (exObj.substitution1.name.isBlank()) {
+                                        errors.add("[$weekKey, $dayLabel, $exLabel -> substitution1] Missing expected key: 'name' is empty.")
+                                    }
+                                    if (exObj.substitution1.muscleGroup == null || exObj.substitution1.muscleGroup.isBlank()) {
+                                        errors.add("[$weekKey, $dayLabel, $exLabel -> substitution1] Missing expected key: 'muscleGroup' is null or blank.")
+                                    }
+                                }
+                                if (exObj.substitution2 == null) {
+                                    errors.add("[$weekKey, $dayLabel, $exLabel] Missing expected key: 'substitution2' is missing or null.")
+                                } else {
+                                    if (exObj.substitution2.name.isBlank()) {
+                                        errors.add("[$weekKey, $dayLabel, $exLabel -> substitution2] Missing expected key: 'name' is empty.")
+                                    }
+                                    if (exObj.substitution2.muscleGroup == null || exObj.substitution2.muscleGroup.isBlank()) {
+                                        errors.add("[$weekKey, $dayLabel, $exLabel -> substitution2] Missing expected key: 'muscleGroup' is null or blank.")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return errors
+    }
 }

@@ -130,10 +130,12 @@ fun ProfileScreen(
                     }
                     progressPhotos = fetchedProfile.progressPhotos
                 }
+                isLoading = false
             }
         } catch (e: Exception) {
             errorMessageLog = "Error fetching user profile stream: ${e.message}"
             Log.e("ProfileScreen", "Profile fetch exception", e)
+            isLoading = false
         }
     }
     
@@ -141,10 +143,12 @@ fun ProfileScreen(
         try {
             repository.getWorkouts().collect { workouts ->
                 workoutsList = workouts.filterNotNull()
+                isLoading = false
             }
         } catch (e: Exception) {
             errorMessageLog = "Error fetching workouts history stream: ${e.message}"
             Log.e("ProfileScreen", "Workouts details exception", e)
+            isLoading = false
         }
     }
 
@@ -152,10 +156,12 @@ fun ProfileScreen(
         try {
             repository.getPersonalRecords().collect { prs ->
                 prList = prs.filterNotNull()
+                isLoading = false
             }
         } catch (e: Exception) {
             errorMessageLog = "Error fetching PRs stream: ${e.message}"
             Log.e("ProfileScreen", "PR load exception", e)
+            isLoading = false
         }
     }
 
@@ -163,13 +169,19 @@ fun ProfileScreen(
         try {
             repository.getActiveProgramState().collect { progState ->
                 activeProgramState = progState
+                isLoading = false
             }
         } catch (e: Exception) {
             errorMessageLog = "Error loading Program state stream: ${e.message}"
             Log.e("ProfileScreen", "Program state exception", e)
-        } finally {
             isLoading = false
         }
+    }
+
+    // Safety guard to ensure loading indicator is dismissed if streams are slow or cached empty
+    LaunchedEffect(currentUser) {
+        kotlinx.coroutines.delay(800)
+        isLoading = false
     }
     
     // Media Picking Launcher for progress photo upload
@@ -224,7 +236,7 @@ fun ProfileScreen(
                 title = { Text("MY PROFILE", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 24.sp, letterSpacing = 1.sp) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 actions = {
-                    if (!isEditing && currentUser != null) {
+                    if (!isEditing) {
                         IconButton(onClick = { isEditing = true }) {
                             Icon(Icons.Default.Edit, contentDescription = "Edit Profile Info", tint = AccentGreen)
                         }

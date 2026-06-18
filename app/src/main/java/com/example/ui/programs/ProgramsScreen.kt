@@ -1,5 +1,6 @@
 package com.example.ui.programs
 
+import android.net.Uri
 import android.content.Context
 import android.util.Log
 import androidx.compose.foundation.BorderStroke
@@ -31,6 +32,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import com.example.data.IronLogRepository
 import com.example.model.*
 import com.squareup.moshi.Moshi
@@ -72,6 +75,54 @@ fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) 
 
     val activeProgramState by repository.getActiveProgramState().collectAsState(initial = null)
     var selectedProgramKey by remember { mutableStateOf<String?>(null) }
+    
+    var activeValidationErrors by remember { mutableStateOf<List<String>?>(null) }
+    var showImportDialog by remember { mutableStateOf(false) }
+
+    val processImportedJson: (String) -> Unit = { rawJson ->
+        try {
+            val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
+            val adapter = moshi.adapter(Program::class.java)
+            val rawProgram = adapter.fromJson(rawJson)
+            
+            val errors = ProgramValidator.validateStrict(rawProgram)
+            if (errors.isNotEmpty()) {
+                activeValidationErrors = errors
+            } else {
+                program = ProgramValidator.validateAndSanitize(rawProgram)
+                selectedProgramKey = "custom_imported.json"
+                activeValidationErrors = null
+            }
+        } catch (e: Exception) {
+            Log.e("ProgramsScreen", "Invalid JSON syntax", e)
+            activeValidationErrors = listOf("JSON syntax error: ${e.localizedMessage ?: e.message}")
+        }
+    }
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            isLoading = true
+            coroutineScope.launch {
+                try {
+                    val json = context.contentResolver.openInputStream(uri)?.use { stream ->
+                        stream.bufferedReader().use { it.readText() }
+                    }
+                    if (!json.isNullOrBlank()) {
+                        processImportedJson(json)
+                    } else {
+                        activeValidationErrors = listOf("Selected JSON file is empty or unreadable.")
+                    }
+                } catch (e: Exception) {
+                    Log.e("ProgramsScreen", "Error picking file", e)
+                    activeValidationErrors = listOf("Failed to read selected file: ${e.message}")
+                } finally {
+                    isLoading = false
+                }
+            }
+        }
+    }
 
     // Auto-select program if already active
     LaunchedEffect(activeProgramState) {
@@ -84,6 +135,7 @@ fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) 
     // Load program files on demand when a program is selected / active
     LaunchedEffect(selectedProgramKey) {
         val key = selectedProgramKey ?: return@LaunchedEffect
+        if (key == "custom_imported.json") return@LaunchedEffect
         isLoading = true
         // Try reading from Firestore first, else fallback to asset
         var fetchedFromFirestore = false
@@ -234,10 +286,23 @@ fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) 
             )
         }
     ) { padding ->
-        if (showSelector) {
+        if (activeValidationErrors != null) {
+            ImportErrorScreen(
+                errors = activeValidationErrors!!,
+                onBack = {
+                    activeValidationErrors = null
+                    selectedProgramKey = null
+                    program = null
+                },
+                modifier = Modifier.padding(padding)
+            )
+        } else if (showSelector) {
             ProgramSelectionCatalog(
                 onSelect = { key ->
                     selectedProgramKey = key
+                },
+                onImportClick = {
+                    filePickerLauncher.launch("*/*")
                 },
                 modifier = Modifier.padding(padding)
             )
@@ -344,6 +409,28 @@ fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) 
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 contentPadding = PaddingValues(bottom = 100.dp)
             ) {
+                // 0. Scrollable Timeline Component with Expandable Week Headers
+                item {
+                    ProgramTimeline(
+                        program = program!!,
+                        activeWeekIndex = activeWeekIndex,
+                        onWeekSelect = { newWeekIdx ->
+                            activeWeekIndex = newWeekIdx
+                            activeTabDayIndex = 0
+                            coroutineScope.launch {
+                                repository.saveActiveProgramState(
+                                    ActiveProgramState(
+                                        programKey = selectedProgramKey ?: "jeff_nippard.json",
+                                        currentWeekIndex = newWeekIdx,
+                                        workoutsCompletedThisWeek = 0,
+                                        totalWorkoutsThisWeek = 5
+                                    )
+                                )
+                            }
+                        }
+                    )
+                }
+
                 // 1. Week navigation row (Never show words: Block, Phase, Accumulation, Intensification)
                 item {
                     Card(
@@ -1048,6 +1135,7 @@ fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) 
 @Composable
 fun ProgramSelectionCatalog(
     onSelect: (String) -> Unit,
+    onImportClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -1136,6 +1224,318 @@ fun ProgramSelectionCatalog(
                     }
                 }
             }
+        }
+        
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onImportClick() },
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = com.example.ui.theme.GlassDark),
+                border = BorderStroke(1.dp, com.example.ui.theme.GlassBorderDark)
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(
+                        text = "CUSTOM IMPORT",
+                        color = com.example.ui.theme.AccentGreen,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 10.sp,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Import Custom JSON",
+                        color = Color.White,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 20.sp,
+                        lineHeight = 26.sp
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Import your own custom training program structure conforming to the standard JSON format. Validates sets, RPEs, and structural integrity before saving.",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Button(
+                        onClick = { onImportClick() },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.1f), contentColor = Color.White),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth().height(44.dp)
+                    ) {
+                        Text("BROWSE FILES...", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ProgramTimeline(
+    program: Program,
+    activeWeekIndex: Int,
+    onWeekSelect: (Int) -> Unit
+) {
+    val expandedWeeks = remember { androidx.compose.runtime.mutableStateMapOf<Int, Boolean>() }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 4.dp)
+    ) {
+        Text(
+            text = "PROGRAM TIMELINE (12-WEEK OVERVIEW)",
+            color = Color.LightGray.copy(alpha = 0.7f),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.2.sp,
+            modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
+        )
+
+        androidx.compose.foundation.lazy.LazyRow(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            items(12) { weekIdx ->
+                val weekKey = "week${weekIdx + 1}"
+                val weekData = program.weeks[weekKey]
+                val isSelected = weekIdx == activeWeekIndex
+                val isExpanded = expandedWeeks[weekIdx] ?: false
+
+                Card(
+                    modifier = Modifier
+                        .width(if (isExpanded) 195.dp else 125.dp)
+                        .clickable { onWeekSelect(weekIdx) },
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isSelected) com.example.ui.theme.AccentGreen.copy(alpha = 0.15f) else com.example.ui.theme.GlassDark
+                    ),
+                    border = BorderStroke(
+                        1.dp,
+                        if (isSelected) com.example.ui.theme.AccentGreen else com.example.ui.theme.GlassBorderDark
+                    ),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "WEEK ${weekIdx + 1}",
+                                color = if (isSelected) com.example.ui.theme.AccentGreen else Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp
+                            )
+                            
+                            Box(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clickable {
+                                        expandedWeeks[weekIdx] = !isExpanded
+                                    }
+                                    .background(Color.White.copy(alpha = 0.08f), androidx.compose.foundation.shape.CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (isExpanded) "−" else "+",
+                                    color = if (isExpanded) com.example.ui.theme.AccentGreen else Color.White,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        val rawBlock = weekData?.block ?: "Accumulation"
+                        val cleanBlock = rawBlock.replace("Block", "N/A", ignoreCase = true)
+                            .replace("Phase", "N/A", ignoreCase = true)
+                            .replace("Accumulation", "Focus", ignoreCase = true)
+                            .replace("Intensification", "Hypertrophy", ignoreCase = true)
+
+                        Text(
+                            text = cleanBlock,
+                            color = Color.Gray,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+
+                        if (isExpanded) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.12f)))
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            val days = weekData?.days ?: emptyList()
+                            if (days.isEmpty()) {
+                                Text(
+                                    text = "No days configured",
+                                    color = Color.White.copy(alpha = 0.4f),
+                                    fontSize = 9.sp
+                                )
+                            } else {
+                                days.forEachIndexed { dayIdx, day ->
+                                    val split = getDaySplit(day)
+                                    val badgeColor = when (split) {
+                                        "Upper" -> Color(0xFF3F51B5)
+                                        "Lower" -> Color(0xFFE91E63)
+                                        "Push" -> Color(0xFFFF5722)
+                                        "Pull" -> Color(0xFF009688)
+                                        "Legs" -> Color(0xFF9C27B0)
+                                        else -> Color(0xFF607D8B)
+                                    }
+
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 3.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "Day ${dayIdx + 1}",
+                                            color = Color.LightGray,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Normal
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .background(badgeColor.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                                .border(1.dp, badgeColor.copy(alpha = 0.4f), RoundedCornerShape(4.dp))
+                                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = split.uppercase(),
+                                                color = badgeColor,
+                                                fontSize = 7.5.sp,
+                                                fontWeight = FontWeight.Black
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Tap + to view splits",
+                                color = Color.White.copy(alpha = 0.25f),
+                                fontSize = 8.5.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fun getDaySplit(day: ProgramDay): String {
+    if (day.isRestDay || day.exercises.isEmpty()) return "Recovery"
+    val nameLower = day.dayName.lowercase()
+    if (nameLower.contains("rest") || nameLower.contains("recovery") || nameLower.contains("off day")) {
+        return "Recovery"
+    }
+    
+    if (nameLower.contains("upper")) return "Upper"
+    if (nameLower.contains("lower")) return "Lower"
+    if (nameLower.contains("push")) return "Push"
+    if (nameLower.contains("pull")) return "Pull"
+    if (nameLower.contains("legs") || nameLower.contains("leg")) return "Legs"
+    
+    val muscleGroups = day.exercises.mapNotNull { it.muscleGroup?.lowercase() }.filter { it.isNotBlank() }
+    if (muscleGroups.isEmpty()) {
+        if (nameLower.contains("squat") || nameLower.contains("deadlift") || nameLower.contains("quad") || nameLower.contains("hamstring")) return "Legs"
+        if (nameLower.contains("chest") || nameLower.contains("shoulder") || nameLower.contains("press")) return "Push"
+        if (nameLower.contains("back") || nameLower.contains("row") || nameLower.contains("bicep")) return "Pull"
+        return "Recovery"
+    }
+    
+    val legCount = muscleGroups.count { it.contains("quad") || it.contains("hamstring") || it.contains("calves") || it.contains("glutes") || it.contains("leg") || it.contains("thigh") }
+    val pushCount = muscleGroups.count { it.contains("chest") || it.contains("shoulder") || it.contains("triceps") || it.contains("pecs") || it.contains("push") }
+    val pullCount = muscleGroups.count { it.contains("back") || it.contains("biceps") || it.contains("pull") || it.contains("lats") || it.contains("rear") }
+    
+    if (legCount > muscleGroups.size / 2) return "Legs"
+    if (pushCount > pullCount && pushCount > legCount) {
+        if (nameLower.contains("upper")) return "Upper"
+        return "Push"
+    }
+    if (pullCount > pushCount && pullCount > legCount) {
+        if (nameLower.contains("upper")) return "Upper"
+        return "Pull"
+    }
+    if (legCount > 0) return "Lower"
+    return "Upper"
+}
+
+@Composable
+fun ImportErrorScreen(
+    errors: List<String>,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.Info,
+            contentDescription = "Error",
+            tint = Color(0xFFE53935),
+            modifier = Modifier.size(64.dp)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "IMPORT FAILED",
+            color = Color(0xFFE53935),
+            fontWeight = FontWeight.Black,
+            fontSize = 24.sp,
+            letterSpacing = 2.sp
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "The uploaded JSON file does not match the required schema structure.",
+            color = Color.White.copy(alpha = 0.8f),
+            fontSize = 14.sp,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+        Spacer(modifier = Modifier.height(32.dp))
+        
+        Card(
+            modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
+            colors = CardDefaults.cardColors(containerColor = com.example.ui.theme.GlassDark),
+            border = BorderStroke(1.dp, Color(0xFFE53935).copy(alpha = 0.3f))
+        ) {
+            LazyColumn(modifier = Modifier.padding(16.dp)) {
+                items(errors) { error ->
+                    Text(
+                        text = "• $error",
+                        color = Color.White.copy(alpha = 0.9f),
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(32.dp))
+        
+        Button(
+            onClick = onBack,
+            colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.1f), contentColor = Color.White),
+            modifier = Modifier.fillMaxWidth().height(48.dp)
+        ) {
+            Text("GO BACK", fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
         }
     }
 }
