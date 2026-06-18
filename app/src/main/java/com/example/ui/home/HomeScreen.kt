@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -147,6 +148,7 @@ fun HomeScreen(
                     }
                 } else {
                     DashboardContent(
+                        repository = repository,
                         program = program!!,
                         activeProgramState = activeProgramState!!,
                         activeWorkout = activeWorkout,
@@ -442,6 +444,7 @@ fun OnboardingWizard(
 
 @Composable
 fun DashboardContent(
+    repository: IronLogRepository,
     program: Program,
     activeProgramState: ActiveProgramState,
     activeWorkout: Workout?,
@@ -459,21 +462,60 @@ fun DashboardContent(
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
-    val completedMap = activeProgramState.completedWorkoutsMap
-    val currentWeekName = "Foundation Block - Week ${activeProgramState.currentWeekIndex + 1}"
+    val completedMap = remember(activeProgramState, workoutsList) {
+        val map = activeProgramState.completedWorkoutsMap.toMutableMap()
+        workoutsList.filter { it.status == "completed" && !it.templateId.isNullOrBlank() }.forEach { w ->
+            map[w.templateId!!] = true
+        }
+        map
+    }
+
+    val dynamicActiveWeekIndex = remember(completedMap, program) {
+        var firstIncomplete = 0
+        for (wIdx in 0 until 12) {
+            val wKey = "week${wIdx + 1}"
+            val weekData = program.weeks[wKey] ?: continue
+            val weekDays = weekData.days
+            val weekTotalWorkouts = weekDays.count { !it.isRestDay }
+            val weekCompletedWorkouts = weekDays.indices.count { dayIdx ->
+                !weekDays[dayIdx].isRestDay && completedMap["${wKey}_$dayIdx"] == true
+            }
+            if (weekTotalWorkouts > 0 && weekCompletedWorkouts < weekTotalWorkouts) {
+                firstIncomplete = wIdx
+                break
+            }
+        }
+        firstIncomplete
+    }
+
+    val shownWeekIndex = activeProgramState.currentWeekIndex
+    val shownWeekKey = "week${shownWeekIndex + 1}"
+    val shownWeekObj = program.weeks[shownWeekKey]
+    val currentWeekName = "${shownWeekObj?.block ?: "Foundation Block"} - Week ${shownWeekIndex + 1}"
 
     // Calculated metrics
     val totalScheduledDays = remember(program) {
-        // Find total days count across weeks in program (week 1 days + week 2 days...)
         program.weeks.values.sumOf { block -> block.days.count { !it.isRestDay } }
+    }
+    
+    val totalCompletedScheduledDays = remember(program, completedMap) {
+        var count = 0
+        program.weeks.forEach { (wKey, weekData) ->
+            weekData.days.forEachIndexed { dayIdx, day ->
+                if (!day.isRestDay && completedMap["${wKey}_$dayIdx"] == true) {
+                    count++
+                }
+            }
+        }
+        count
     }
     
     val totalCompletedDays = remember(workoutsList) {
         workoutsList.count { it.status == "completed" }
     }
     
-    val completionPercent = remember(totalScheduledDays, totalCompletedDays) {
-        if (totalScheduledDays == 0) 0 else ((totalCompletedDays.toDouble() / totalScheduledDays) * 100).toInt().coerceIn(0, 100)
+    val completionPercent = remember(totalScheduledDays, totalCompletedScheduledDays) {
+        if (totalScheduledDays == 0) 0 else ((totalCompletedScheduledDays.toDouble() / totalScheduledDays) * 100).toInt().coerceIn(0, 100)
     }
 
     val currentStreak = remember(workoutsList) {
@@ -529,6 +571,21 @@ fun DashboardContent(
             !day.isRestDay && completedMap["week${activeProgramState.currentWeekIndex + 1}_$idx"] == true
         }
         wc >= totalWorkoutsThisWeek && totalWorkoutsThisWeek > 0
+    }
+
+    // Auto-advance to correct week if FREE NAV is disabled
+    LaunchedEffect(dynamicActiveWeekIndex, activeProgramState.freeNavigationEnabled) {
+        if (!activeProgramState.freeNavigationEnabled && activeProgramState.currentWeekIndex != dynamicActiveWeekIndex) {
+            val nextWeekDays = program.weeks["week${dynamicActiveWeekIndex + 1}"]?.days ?: emptyList()
+            repository.saveActiveProgramState(
+                activeProgramState.copy(
+                    currentWeekIndex = dynamicActiveWeekIndex,
+                    currentDayIndex = 0,
+                    workoutsCompletedThisWeek = 0,
+                    totalWorkoutsThisWeek = nextWeekDays.count { !it.isRestDay }
+                )
+            )
+        }
     }
 
     Column(
@@ -625,170 +682,6 @@ fun DashboardContent(
                             fontWeight = FontWeight.Black,
                             fontSize = 12.sp
                         )
-                    }
-                }
-            }
-        }
-
-        // 1. Engine Import Diagnostics
-        ImportDiagnosticsPanel(program = program)
-
-        // 2. Collapsible 12-Week Roadmap Timeline
-        var expandedWeekIndex by remember { mutableStateOf<Int?>(null) }
-        
-        Text(
-            text = "12-WEEK TRAINING ROADMAP",
-            color = com.example.ui.theme.GrayMedium,
-            fontWeight = FontWeight.Bold,
-            fontSize = 11.sp,
-            letterSpacing = 1.sp,
-            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-        )
-        
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = com.example.ui.theme.GlassDark),
-            border = BorderStroke(1.dp, com.example.ui.theme.GlassBorderDark)
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                for (wIdx in 0 until 12) {
-                    val wKey = "week${wIdx + 1}"
-                    val weekData = program.weeks[wKey] ?: continue
-                    val isWeekExpanded = expandedWeekIndex == wIdx
-                    
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                    ) {
-                        // Week Title Row
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(
-                                    color = if (isWeekExpanded) Color.White.copy(alpha = 0.05f) else Color.Transparent,
-                                    shape = RoundedCornerShape(8.dp)
-                                )
-                                .clickable {
-                                    expandedWeekIndex = if (isWeekExpanded) null else wIdx
-                                }
-                                .padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(
-                                    text = "Week ${wIdx + 1} of 12",
-                                    fontWeight = FontWeight.Black,
-                                    color = if (wIdx == activeProgramState.currentWeekIndex) com.example.ui.theme.AccentGreen else Color.White,
-                                    fontSize = 14.sp
-                                )
-                                Text(
-                                    text = weekData.block.uppercase(),
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = com.example.ui.theme.GrayMedium,
-                                    letterSpacing = 1.sp
-                                )
-                            }
-                            Icon(
-                                imageVector = if (isWeekExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                contentDescription = null,
-                                tint = Color.White.copy(alpha = 0.6f)
-                            )
-                        }
-                        
-                        // Expanded week details (Days)
-                        if (isWeekExpanded) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                weekData.days.forEachIndexed { dayIdx, dayObj ->
-                                    val isDayCompleted = completedMap["week${wIdx + 1}_$dayIdx"] == true
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .background(Color.White.copy(alpha = 0.03f), RoundedCornerShape(8.dp))
-                                            .border(
-                                                1.dp,
-                                                if (isDayCompleted) com.example.ui.theme.AccentGreen.copy(alpha = 0.2f) else Color.Transparent,
-                                                RoundedCornerShape(8.dp)
-                                            )
-                                            .clickable {
-                                                if (!dayObj.isRestDay) {
-                                                    val newW = dayObj.toWorkout("week${wIdx + 1}", dayIdx)
-                                                    onStartWorkout(newW)
-                                                }
-                                            }
-                                            .padding(10.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                val dayLabel = when (dayIdx) {
-                                                    0 -> "Monday"
-                                                    1 -> "Tuesday"
-                                                    2 -> "Wednesday"
-                                                    3 -> "Thursday"
-                                                    4 -> "Friday"
-                                                    5 -> "Saturday"
-                                                    6 -> "Sunday"
-                                                    else -> "Day ${dayIdx + 1}"
-                                                }
-                                                Text(
-                                                    text = dayLabel,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = com.example.ui.theme.AccentGreen,
-                                                    fontSize = 11.sp
-                                                )
-                                                if (dayObj.isRestDay) {
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .padding(start = 8.dp)
-                                                            .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
-                                                            .padding(horizontal = 4.dp, vertical = 2.dp)
-                                                    ) {
-                                                        Text("REST", color = Color.LightGray, fontSize = 8.sp, fontWeight = FontWeight.Bold)
-                                                    }
-                                                }
-                                            }
-                                            Spacer(modifier = Modifier.height(2.dp))
-                                            Text(
-                                                text = if (dayObj.isRestDay) "Recovery & stretches" else dayObj.dayName,
-                                                fontWeight = FontWeight.Medium,
-                                                color = Color.White,
-                                                fontSize = 12.sp
-                                            )
-                                        }
-                                        if (isDayCompleted) {
-                                            Icon(
-                                                imageVector = Icons.Default.CheckCircle,
-                                                contentDescription = "Completed",
-                                                tint = com.example.ui.theme.AccentGreen,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        } else if (!dayObj.isRestDay) {
-                                            Icon(
-                                                imageVector = Icons.Default.PlayArrow,
-                                                contentDescription = "Start",
-                                                tint = Color.White.copy(alpha = 0.5f),
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if (wIdx < 11) {
-                        Divider(color = Color.White.copy(alpha = 0.05f), thickness = 1.dp)
                     }
                 }
             }
@@ -1206,6 +1099,217 @@ fun DashboardContent(
                     val valText = if (newestPR != null) "${newestPR.value.toInt()} KG" else "NONE SET"
                     Text(text = valText, fontWeight = FontWeight.Black, fontSize = 16.sp, color = Color.White)
                     Text(text = "MOST RECENT PR", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = com.example.ui.theme.GrayMedium)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Engine Import Diagnostics Panel
+        ImportDiagnosticsPanel(program = program)
+
+        // Collapsible 12-Week Roadmap Timeline (now at the bottom of the Column)
+        var expandedWeekIndex by remember { mutableStateOf<Int?>(null) }
+        
+        Text(
+            text = "12-WEEK TRAINING ROADMAP",
+            color = com.example.ui.theme.GrayMedium,
+            fontWeight = FontWeight.Bold,
+            fontSize = 11.sp,
+            letterSpacing = 1.sp,
+            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+        )
+        
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = com.example.ui.theme.GlassDark),
+            border = BorderStroke(1.dp, com.example.ui.theme.GlassBorderDark)
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                for (wIdx in 0 until 12) {
+                    val wKey = "week${wIdx + 1}"
+                    val weekData = program.weeks[wKey] ?: continue
+                    val isWeekExpanded = expandedWeekIndex == wIdx
+                    
+                    val weekDays = weekData.days
+                    val weekTotalWorkouts = weekDays.count { !it.isRestDay }
+                    val weekCompletedWorkouts = weekDays.indices.count { dayIdx ->
+                        !weekDays[dayIdx].isRestDay && completedMap["${wKey}_$dayIdx"] == true
+                    }
+                    val weekProgressPercent = if (weekTotalWorkouts == 0) 0 else ((weekCompletedWorkouts.toDouble() / weekTotalWorkouts) * 100).toInt().coerceIn(0, 100)
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    ) {
+                        // Week Title Row
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    color = if (isWeekExpanded) Color.White.copy(alpha = 0.05f) else Color.Transparent,
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                .clickable {
+                                    expandedWeekIndex = if (isWeekExpanded) null else wIdx
+                                }
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = "Week ${wIdx + 1} of 12",
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (wIdx == activeProgramState.currentWeekIndex) com.example.ui.theme.AccentGreen else Color.White,
+                                        fontSize = 14.sp
+                                    )
+                                    Text(
+                                        text = "$weekProgressPercent%",
+                                        color = if (weekProgressPercent == 100) com.example.ui.theme.AccentGreen else Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        modifier = Modifier.padding(end = 8.dp)
+                                    )
+                                }
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
+                                ) {
+                                    Text(
+                                        text = weekData.block.uppercase(),
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = com.example.ui.theme.GrayMedium,
+                                        letterSpacing = 1.sp
+                                    )
+                                    Text(
+                                        text = "$weekCompletedWorkouts of $weekTotalWorkouts completed",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = com.example.ui.theme.GrayMedium,
+                                        modifier = Modifier.padding(end = 8.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                LinearProgressIndicator(
+                                    progress = weekProgressPercent / 100f,
+                                    color = if (weekProgressPercent == 100) com.example.ui.theme.AccentGreen else com.example.ui.theme.AccentGreen.copy(alpha = 0.6f),
+                                    trackColor = Color.White.copy(alpha = 0.1f),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(end = 8.dp)
+                                        .height(4.dp)
+                                        .clip(RoundedCornerShape(2.dp))
+                                )
+                            }
+                            Icon(
+                                imageVector = if (isWeekExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                contentDescription = null,
+                                tint = Color.White.copy(alpha = 0.6f),
+                                modifier = Modifier.padding(start = 8.dp)
+                            )
+                        }
+                        
+                        // Expanded week details (Days)
+                        if (isWeekExpanded) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                weekData.days.forEachIndexed { dayIdx, dayObj ->
+                                    val isDayCompleted = completedMap["week${wIdx + 1}_$dayIdx"] == true
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color.White.copy(alpha = 0.03f), RoundedCornerShape(8.dp))
+                                            .border(
+                                                1.dp,
+                                                if (isDayCompleted) com.example.ui.theme.AccentGreen.copy(alpha = 0.2f) else Color.Transparent,
+                                                RoundedCornerShape(8.dp)
+                                            )
+                                            .clickable {
+                                                if (!dayObj.isRestDay) {
+                                                    val newW = dayObj.toWorkout("week${wIdx + 1}", dayIdx)
+                                                    onStartWorkout(newW)
+                                                }
+                                            }
+                                            .padding(10.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                val dayLabel = when (dayIdx) {
+                                                    0 -> "Monday"
+                                                    1 -> "Tuesday"
+                                                    2 -> "Wednesday"
+                                                    3 -> "Thursday"
+                                                    4 -> "Friday"
+                                                    5 -> "Saturday"
+                                                    6 -> "Sunday"
+                                                    else -> "Day ${dayIdx + 1}"
+                                                }
+                                                Text(
+                                                    text = dayLabel,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = com.example.ui.theme.AccentGreen,
+                                                    fontSize = 11.sp
+                                                )
+                                                if (dayObj.isRestDay) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .padding(start = 8.dp)
+                                                            .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
+                                                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                                                    ) {
+                                                        Text("REST", color = Color.LightGray, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                                    }
+                                                }
+                                            }
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = if (dayObj.isRestDay) "Recovery & stretches" else dayObj.dayName,
+                                                fontWeight = FontWeight.Medium,
+                                                color = Color.White,
+                                                fontSize = 12.sp
+                                            )
+                                        }
+                                        if (isDayCompleted) {
+                                            Icon(
+                                                imageVector = Icons.Default.CheckCircle,
+                                                contentDescription = "Completed",
+                                                tint = com.example.ui.theme.AccentGreen,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        } else if (!dayObj.isRestDay) {
+                                            Icon(
+                                                imageVector = Icons.Default.PlayArrow,
+                                                contentDescription = "Start",
+                                                tint = Color.White.copy(alpha = 0.5f),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (wIdx < 11) {
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.05f), thickness = 1.dp)
+                    }
                 }
             }
         }

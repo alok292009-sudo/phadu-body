@@ -529,13 +529,31 @@ class FirebaseIronLogRepository(private val context: Context) : IronLogRepositor
                 }
             }
             
-            if (workout.templateId != null) {
+            if (finishedWorkout.templateId != null) {
                 val stateDoc = firestore.collection("users").document(uid).collection("settings").document("activeProgramState")
                 val stateSnapshot = stateDoc.get().await()
                 if (stateSnapshot.exists()) {
                     val state = stateSnapshot.toObject(ActiveProgramState::class.java)
                     if (state != null) {
+                        val newCompletedMap = state.completedWorkoutsMap.toMutableMap()
+                        newCompletedMap[finishedWorkout.templateId] = true
+
+                        val parts = finishedWorkout.templateId.split("_")
+                        val dayIndex = if (parts.size == 2) parts[1].toIntOrNull() else null
+                        
+                        val nextDayIndex = if (dayIndex != null) {
+                            if (dayIndex == state.currentDayIndex) {
+                                (dayIndex + 1).coerceAtMost(6)
+                            } else {
+                                state.currentDayIndex
+                            }
+                        } else {
+                            state.currentDayIndex
+                        }
+
                         val newState = state.copy(
+                            completedWorkoutsMap = newCompletedMap,
+                            currentDayIndex = nextDayIndex,
                             workoutsCompletedThisWeek = state.workoutsCompletedThisWeek + 1
                         )
                         if (newState.workoutsCompletedThisWeek >= newState.totalWorkoutsThisWeek) {
