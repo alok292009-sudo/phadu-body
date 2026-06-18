@@ -255,19 +255,57 @@ fun ProfileScreen(
                             modifier = Modifier.weight(1f)
                         )
                         
-                        OutlinedTextField(
-                            value = genderInput,
-                            onValueChange = { genderInput = it },
-                            label = { Text("Gender", color = Color.Gray) },
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = com.example.ui.theme.AccentGreen,
-                                unfocusedBorderColor = com.example.ui.theme.GrayMedium,
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White
-                            ),
-                            singleLine = true,
-                            modifier = Modifier.weight(1f)
-                        )
+                        var genderExpanded by remember { mutableStateOf(false) }
+                        
+                        Box(modifier = Modifier.weight(1f)) {
+                            OutlinedTextField(
+                                value = genderInput,
+                                onValueChange = { },
+                                readOnly = true,
+                                label = { Text("Gender", color = Color.Gray) },
+                                trailingIcon = {
+                                    IconButton(onClick = { genderExpanded = true }) {
+                                        Icon(
+                                            imageVector = Icons.Default.ArrowDropDown,
+                                            contentDescription = "Select Gender",
+                                            tint = Color.White
+                                        )
+                                    }
+                                },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = com.example.ui.theme.AccentGreen,
+                                    unfocusedBorderColor = com.example.ui.theme.GrayMedium,
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                ),
+                                singleLine = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { genderExpanded = true }
+                            )
+                            
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .clickable { genderExpanded = true }
+                            )
+                            
+                            DropdownMenu(
+                                expanded = genderExpanded,
+                                onDismissRequest = { genderExpanded = false },
+                                modifier = Modifier.background(com.example.ui.theme.GlassDark)
+                            ) {
+                                listOf("Male", "Female", "Prefer not to say").forEach { option ->
+                                    DropdownMenuItem(
+                                        text = { Text(option, color = Color.White) },
+                                        onClick = {
+                                            genderInput = option
+                                            genderExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
                     }
                     
                     Row(

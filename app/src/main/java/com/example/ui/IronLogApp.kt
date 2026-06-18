@@ -191,7 +191,7 @@ fun MainScreenWrapper(
                         coroutineScope.launch {
                             var newWorkout = com.example.model.Workout()
                             if (templateId != null) {
-                                val templates = repository.getTemplates().first()
+                                val templates = repository.getTemplates().first { it.isNotEmpty() }
                                 val template = templates.find { it.id == templateId }
                                 if (template != null) {
                                     val loggedExercises = template.exercises.map { tex ->

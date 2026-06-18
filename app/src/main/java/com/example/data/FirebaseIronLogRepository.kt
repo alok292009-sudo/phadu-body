@@ -9,6 +9,8 @@ import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
@@ -214,183 +216,231 @@ class FirebaseIronLogRepository(private val context: Context) : IronLogRepositor
         }
     }
 
-    override fun getWorkouts(): Flow<List<Workout>> {
-        if (auth.currentUser == null) return localFallback.getWorkouts()
-        return callbackFlow {
-            val col = workoutsCollection()
-            val listener = col.orderBy("date", Query.Direction.DESCENDING)
-                .addSnapshotListener { snapshot, e ->
-                if (e != null) {
-                    Log.e("FirebaseRepo", "Listen error", e)
-                    return@addSnapshotListener
-                }
-                if (snapshot != null) {
-                    try {
-                        val workouts = snapshot.documents.mapNotNull { doc ->
+    override fun getWorkouts(): Flow<List<Workout>> = callbackFlow {
+        val localJob = launch {
+            localFallback.getWorkouts().collect {
+                trySend(it)
+            }
+        }
+        var registration: ListenerRegistration? = null
+        val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
+            registration?.remove()
+            val user = firebaseAuth.currentUser
+            if (user != null) {
+                val col = workoutsCollection()
+                registration = col.orderBy("date", Query.Direction.DESCENDING)
+                    .addSnapshotListener { snapshot, e ->
+                        if (e != null) {
+                            Log.e("FirebaseRepo", "Firestore list listen error", e)
+                            return@addSnapshotListener
+                        }
+                        if (snapshot != null) {
                             try {
-                                doc.toObject(Workout::class.java)
-                            } catch (ex: Exception) {
-                                Log.e("FirebaseRepo", "toObject(Workout) failed, trying manual fallback", ex)
-                                try {
-                                    val id = doc.getString("id") ?: doc.id
-                                    val date = doc.getLong("date") ?: 0L
-                                    val templateId = doc.getString("templateId")
-                                    val templateName = doc.getString("templateName")
-                                    val status = doc.getString("status") ?: "in_progress"
-                                    val durationMinutes = doc.getLong("durationMinutes")?.toInt() ?: 0
-                                    val totalVolume = doc.getDouble("totalVolume") ?: 0.0
-                                    
-                                    val loggedRaw = doc.get("loggedExercises") as? List<*> ?: emptyList<Any>()
-                                    val loggedExercises = loggedRaw.map { item ->
-                                        val exMap = item as? Map<*, *>
-                                        val exerciseId = exMap?.get("exerciseId") as? String ?: ""
-                                        val exerciseName = exMap?.get("exerciseName") as? String ?: ""
-                                        val videoUrl = exMap?.get("videoUrl") as? String
-                                        
-                                        val setsRaw = exMap?.get("sets") as? List<*> ?: emptyList<Any>()
-                                        val sets = setsRaw.map { setItem ->
-                                            val setMap = setItem as? Map<*, *>
-                                            WorkoutSet(
-                                                setNumber = (setMap?.get("setNumber") as? Number)?.toInt() ?: 1,
-                                                weight = (setMap?.get("weight") as? Number)?.toDouble() ?: 0.0,
-                                                reps = (setMap?.get("reps") as? Number)?.toInt() ?: 0,
-                                                isWarmup = (setMap?.get("warmup") as? Boolean ?: setMap?.get("isWarmup") as? Boolean ?: false),
-                                                completedAt = (setMap?.get("completedAt") as? Number)?.toLong(),
-                                                rpe = (setMap?.get("rpe") as? Number)?.toFloat()
+                                val workouts = snapshot.documents.mapNotNull { doc ->
+                                    try {
+                                        doc.toObject(Workout::class.java)
+                                    } catch (ex: Exception) {
+                                        Log.e("FirebaseRepo", "toObject(Workout) failed, manual fallback", ex)
+                                        try {
+                                            val id = doc.getString("id") ?: doc.id
+                                            val date = doc.getLong("date") ?: 0L
+                                            val templateId = doc.getString("templateId")
+                                            val templateName = doc.getString("templateName")
+                                            val status = doc.getString("status") ?: "in_progress"
+                                            val durationMinutes = doc.getLong("durationMinutes")?.toInt() ?: 0
+                                            val totalVolume = doc.getDouble("totalVolume") ?: 0.0
+                                            
+                                            val loggedRaw = doc.get("loggedExercises") as? List<*> ?: emptyList<Any>()
+                                            val loggedExercises = loggedRaw.map { item ->
+                                                val exMap = item as? Map<*, *>
+                                                val exerciseId = exMap?.get("exerciseId") as? String ?: ""
+                                                val exerciseName = exMap?.get("exerciseName") as? String ?: ""
+                                                val videoUrl = exMap?.get("videoUrl") as? String
+                                                
+                                                val setsRaw = exMap?.get("sets") as? List<*> ?: emptyList<Any>()
+                                                val sets = setsRaw.map { setItem ->
+                                                    val setMap = setItem as? Map<*, *>
+                                                    WorkoutSet(
+                                                        setNumber = (setMap?.get("setNumber") as? Number)?.toInt() ?: 1,
+                                                        weight = (setMap?.get("weight") as? Number)?.toDouble() ?: 0.0,
+                                                        reps = (setMap?.get("reps") as? Number)?.toInt() ?: 0,
+                                                        isWarmup = (setMap?.get("warmup") as? Boolean ?: setMap?.get("isWarmup") as? Boolean ?: false),
+                                                        completedAt = (setMap?.get("completedAt") as? Number)?.toLong(),
+                                                        rpe = (setMap?.get("rpe") as? Number)?.toFloat()
+                                                    )
+                                                }
+                                                LoggedExercise(
+                                                    exerciseId = exerciseId,
+                                                    exerciseName = exerciseName,
+                                                    videoUrl = videoUrl,
+                                                    sets = sets
+                                                )
+                                            }
+                                            Workout(
+                                                id = id,
+                                                date = date,
+                                                templateId = templateId,
+                                                templateName = templateName,
+                                                status = status,
+                                                durationMinutes = durationMinutes,
+                                                loggedExercises = loggedExercises,
+                                                totalVolume = totalVolume
                                             )
+                                        } catch (fallbackEx: Exception) {
+                                            Log.e("FirebaseRepo", "Fallback manual mapping failed for Workout", fallbackEx)
+                                            null
                                         }
-                                        LoggedExercise(
-                                            exerciseId = exerciseId,
-                                            exerciseName = exerciseName,
-                                            videoUrl = videoUrl,
-                                            sets = sets
-                                        )
                                     }
-                                    Workout(
-                                        id = id,
-                                        date = date,
-                                        templateId = templateId,
-                                        templateName = templateName,
-                                        status = status,
-                                        durationMinutes = durationMinutes,
-                                        loggedExercises = loggedExercises,
-                                        totalVolume = totalVolume
-                                    )
-                                } catch (fallbackEx: Exception) {
-                                    Log.e("FirebaseRepo", "Fallback manual mapping failed for Workout", fallbackEx)
-                                    null
                                 }
+                                launch {
+                                    for (w in workouts) {
+                                        localFallback.saveWorkout(w)
+                                    }
+                                }
+                                trySend(workouts)
+                            } catch (exAll: Exception) {
+                                Log.e("FirebaseRepo", "Error mapping workouts", exAll)
                             }
                         }
-                        trySend(workouts)
-                    } catch (exAll: Exception) {
-                        Log.e("FirebaseRepo", "Error mapping workouts", exAll)
-                        trySend(emptyList())
                     }
-                }
             }
-            awaitClose { listener.remove() }
+        }
+        auth.addAuthStateListener(listener)
+        awaitClose {
+            auth.removeAuthStateListener(listener)
+            registration?.remove()
+            localJob.cancel()
         }
     }
 
-    override fun getActiveWorkout(): Flow<Workout?> {
-        if (auth.currentUser == null) return localFallback.getActiveWorkout()
-        return callbackFlow {
-            val col = workoutsCollection()
-            val listener = col.whereEqualTo("status", "in_progress")
-                .limit(1)
-                .addSnapshotListener { snapshot, e ->
-                if (e != null) {
-                    Log.e("FirebaseRepo", "Listen error", e)
-                    return@addSnapshotListener
-                }
-                if (snapshot != null && !snapshot.isEmpty) {
-                    try {
-                        val doc = snapshot.documents.first()
-                        val workout = try {
-                            doc.toObject(Workout::class.java)
-                        } catch (ex: Exception) {
-                            Log.e("FirebaseRepo", "toObject(Workout) failed for active, trying manual fallback", ex)
+    override fun getActiveWorkout(): Flow<Workout?> = callbackFlow {
+        val localJob = launch {
+            localFallback.getActiveWorkout().collect {
+                trySend(it)
+            }
+        }
+        var registration: ListenerRegistration? = null
+        val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
+            registration?.remove()
+            val user = firebaseAuth.currentUser
+            if (user != null) {
+                val col = workoutsCollection()
+                registration = col.whereEqualTo("status", "in_progress")
+                    .limit(1)
+                    .addSnapshotListener { snapshot, e ->
+                        if (e != null) {
+                            Log.e("FirebaseRepo", "Firestore active listen error", e)
+                            return@addSnapshotListener
+                        }
+                        if (snapshot != null) {
                             try {
-                                val id = doc.getString("id") ?: doc.id
-                                val date = doc.getLong("date") ?: 0L
-                                val templateId = doc.getString("templateId")
-                                val templateName = doc.getString("templateName")
-                                val status = doc.getString("status") ?: "in_progress"
-                                val durationMinutes = doc.getLong("durationMinutes")?.toInt() ?: 0
-                                val totalVolume = doc.getDouble("totalVolume") ?: 0.0
-                                
-                                val loggedRaw = doc.get("loggedExercises") as? List<*> ?: emptyList<Any>()
-                                val loggedExercises = loggedRaw.map { item ->
-                                    val exMap = item as? Map<*, *>
-                                    val exerciseId = exMap?.get("exerciseId") as? String ?: ""
-                                    val exerciseName = exMap?.get("exerciseName") as? String ?: ""
-                                    val videoUrl = exMap?.get("videoUrl") as? String
-                                    
-                                    val setsRaw = exMap?.get("sets") as? List<*> ?: emptyList<Any>()
-                                    val sets = setsRaw.map { setItem ->
-                                        val setMap = setItem as? Map<*, *>
-                                        WorkoutSet(
-                                            setNumber = (setMap?.get("setNumber") as? Number)?.toInt() ?: 1,
-                                            weight = (setMap?.get("weight") as? Number)?.toDouble() ?: 0.0,
-                                            reps = (setMap?.get("reps") as? Number)?.toInt() ?: 0,
-                                            isWarmup = (setMap?.get("warmup") as? Boolean ?: setMap?.get("isWarmup") as? Boolean ?: false),
-                                            completedAt = (setMap?.get("completedAt") as? Number)?.toLong(),
-                                            rpe = (setMap?.get("rpe") as? Number)?.toFloat()
-                                        )
+                                val workout = if (!snapshot.isEmpty) {
+                                    val doc = snapshot.documents.first()
+                                    try {
+                                        doc.toObject(Workout::class.java)
+                                    } catch (ex: Exception) {
+                                        Log.e("FirebaseRepo", "toObject(Workout) failed for active, trying manual fallback", ex)
+                                        try {
+                                            val id = doc.getString("id") ?: doc.id
+                                            val date = doc.getLong("date") ?: 0L
+                                            val templateId = doc.getString("templateId")
+                                            val templateName = doc.getString("templateName")
+                                            val status = doc.getString("status") ?: "in_progress"
+                                            val durationMinutes = doc.getLong("durationMinutes")?.toInt() ?: 0
+                                            val totalVolume = doc.getDouble("totalVolume") ?: 0.0
+                                            
+                                            val loggedRaw = doc.get("loggedExercises") as? List<*> ?: emptyList<Any>()
+                                            val loggedExercises = loggedRaw.map { item ->
+                                                val exMap = item as? Map<*, *>
+                                                val exerciseId = exMap?.get("exerciseId") as? String ?: ""
+                                                val exerciseName = exMap?.get("exerciseName") as? String ?: ""
+                                                val videoUrl = exMap?.get("videoUrl") as? String
+                                                
+                                                val setsRaw = exMap?.get("sets") as? List<*> ?: emptyList<Any>()
+                                                val sets = setsRaw.map { setItem ->
+                                                    val setMap = setItem as? Map<*, *>
+                                                    WorkoutSet(
+                                                        setNumber = (setMap?.get("setNumber") as? Number)?.toInt() ?: 1,
+                                                        weight = (setMap?.get("weight") as? Number)?.toDouble() ?: 0.0,
+                                                        reps = (setMap?.get("reps") as? Number)?.toInt() ?: 0,
+                                                        isWarmup = (setMap?.get("warmup") as? Boolean ?: setMap?.get("isWarmup") as? Boolean ?: false),
+                                                        completedAt = (setMap?.get("completedAt") as? Number)?.toLong(),
+                                                        rpe = (setMap?.get("rpe") as? Number)?.toFloat()
+                                                    )
+                                                }
+                                                LoggedExercise(
+                                                    exerciseId = exerciseId,
+                                                    exerciseName = exerciseName,
+                                                    videoUrl = videoUrl,
+                                                    sets = sets
+                                                )
+                                            }
+                                            Workout(
+                                                id = id,
+                                                date = date,
+                                                templateId = templateId,
+                                                templateName = templateName,
+                                                status = status,
+                                                durationMinutes = durationMinutes,
+                                                loggedExercises = loggedExercises,
+                                                totalVolume = totalVolume
+                                            )
+                                        } catch (fallbackEx: Exception) {
+                                            Log.e("FirebaseRepo", "Fallback manual mapping failed for active Workout", fallbackEx)
+                                            null
+                                        }
                                     }
-                                    LoggedExercise(
-                                        exerciseId = exerciseId,
-                                        exerciseName = exerciseName,
-                                        videoUrl = videoUrl,
-                                        sets = sets
-                                    )
+                                } else {
+                                    null
                                 }
-                                Workout(
-                                    id = id,
-                                    date = date,
-                                    templateId = templateId,
-                                    templateName = templateName,
-                                    status = status,
-                                    durationMinutes = durationMinutes,
-                                    loggedExercises = loggedExercises,
-                                    totalVolume = totalVolume
-                                )
-                            } catch (fallbackEx: Exception) {
-                                Log.e("FirebaseRepo", "Fallback manual mapping failed for active Workout", fallbackEx)
-                                null
+                                launch {
+                                    if (workout != null) {
+                                        localFallback.saveWorkout(workout)
+                                    } else {
+                                        val active = localFallback.getActiveWorkout().firstOrNull()
+                                        if (active != null) {
+                                            localFallback.deleteWorkout(active.id)
+                                        }
+                                    }
+                                }
+                                trySend(workout)
+                            } catch (exAll: Exception) {
+                                Log.e("FirebaseRepo", "Error mapping active workout", exAll)
                             }
                         }
-                        trySend(workout)
-                    } catch (exAll: Exception) {
-                        Log.e("FirebaseRepo", "Error mapping active workout", exAll)
-                        trySend(null)
                     }
-                } else {
-                    trySend(null)
-                }
             }
-            awaitClose { listener.remove() }
+        }
+        auth.addAuthStateListener(listener)
+        awaitClose {
+            auth.removeAuthStateListener(listener)
+            registration?.remove()
+            localJob.cancel()
         }
     }
 
     override suspend fun saveWorkout(workout: Workout) {
+        val id = if (workout.id.isEmpty()) UUID.randomUUID().toString() else workout.id
+        val workoutCopy = if (workout.date == 0L) {
+            workout.copy(id = id, date = System.currentTimeMillis())
+        } else {
+            workout.copy(id = id)
+        }
+        localFallback.saveWorkout(workoutCopy)
         if (auth.currentUser == null) {
-            localFallback.saveWorkout(workout)
             return
         }
         try {
             val col = workoutsCollection()
-            val id = if (workout.id.isEmpty()) UUID.randomUUID().toString() else workout.id
-            col.document(id).set(workout.copy(id = id)).await()
+            col.document(id).set(workoutCopy).await()
         } catch (e: Exception) {
             Log.e("FirebaseRepo", "Error saving workout", e)
         }
     }
 
     override suspend fun deleteWorkout(workoutId: String) {
+        localFallback.deleteWorkout(workoutId)
         if (auth.currentUser == null) {
-            localFallback.deleteWorkout(workoutId)
             return
         }
         try {
@@ -401,27 +451,26 @@ class FirebaseIronLogRepository(private val context: Context) : IronLogRepositor
     }
 
     override suspend fun finishWorkout(workout: Workout) {
+        var totalVolume = 0.0
+        workout.loggedExercises.forEach { ex ->
+            ex.sets.filter { !it.isWarmup }.forEach { set ->
+                totalVolume += set.weight * set.reps
+            }
+        }
+        val id = if (workout.id.isEmpty()) UUID.randomUUID().toString() else workout.id
+        val finishedWorkout = workout.copy(id = id, status = "completed", totalVolume = totalVolume)
+        
+        localFallback.finishWorkout(finishedWorkout)
         if (auth.currentUser == null) {
-            localFallback.finishWorkout(workout)
             return
         }
         try {
             val col = workoutsCollection()
             val prsCol = prsCollection()
-            val id = if (workout.id.isEmpty()) UUID.randomUUID().toString() else workout.id
-            
-            // Compute volume
-            var totalVolume = 0.0
-            workout.loggedExercises.forEach { ex ->
-                ex.sets.filter { !it.isWarmup }.forEach { set ->
-                    totalVolume += set.weight * set.reps
-                }
-            }
-            val finishedWorkout = workout.copy(id = id, status = "completed", totalVolume = totalVolume)
             
             col.document(id).set(finishedWorkout).await()
             
-            // Update PRs
+            // Update PRs & Active Program State in background safely
             for (ex in finishedWorkout.loggedExercises) {
                 var exBestWeight = 0.0
                 var exBestWeightReps = 0
@@ -441,9 +490,8 @@ class FirebaseIronLogRepository(private val context: Context) : IronLogRepositor
                 
                 if (exBestWeight > 0) {
                     val prDoc = prsCol.document(ex.exerciseId)
-                    val snapshot = try { prDoc.get().await() } catch(e:Exception) { null }
+                    val snapshot = prDoc.get().await()
                     val currentPr = snapshot?.toObject(PersonalRecord::class.java) ?: PersonalRecord(exerciseId = ex.exerciseId)
-                    
                     var newPr = currentPr
                     if (exBestWeight > (currentPr.bestWeight?.value ?: 0.0)) {
                         newPr = newPr.copy(bestWeight = RecordDetail(exBestWeight, exBestWeightReps, finishedWorkout.date, id))
@@ -461,23 +509,23 @@ class FirebaseIronLogRepository(private val context: Context) : IronLogRepositor
                 }
             }
             
-            // Update active program state
             if (workout.templateId != null) {
                 val stateDoc = firestore.collection("users").document(uid).collection("settings").document("activeProgramState")
-                val stateSnapshot = try { stateDoc.get().await() } catch(e:Exception) { null }
-                val state = stateSnapshot?.toObject(ActiveProgramState::class.java)
-                if (state != null) {
-                    val newState = state.copy(
-                        workoutsCompletedThisWeek = state.workoutsCompletedThisWeek + 1
-                    )
-                    if (newState.workoutsCompletedThisWeek >= newState.totalWorkoutsThisWeek) {
-                        stateDoc.set(newState.copy(isWeekCompletedMessageShown = false)).await()
-                    } else {
-                        stateDoc.set(newState).await()
+                val stateSnapshot = stateDoc.get().await()
+                if (stateSnapshot.exists()) {
+                    val state = stateSnapshot.toObject(ActiveProgramState::class.java)
+                    if (state != null) {
+                        val newState = state.copy(
+                            workoutsCompletedThisWeek = state.workoutsCompletedThisWeek + 1
+                        )
+                        if (newState.workoutsCompletedThisWeek >= newState.totalWorkoutsThisWeek) {
+                            stateDoc.set(newState.copy(isWeekCompletedMessageShown = false)).await()
+                        } else {
+                            stateDoc.set(newState).await()
+                        }
                     }
                 }
             }
-            
         } catch (e: Exception) {
             Log.e("FirebaseRepo", "Error finishing workout", e)
         }
@@ -577,36 +625,50 @@ class FirebaseIronLogRepository(private val context: Context) : IronLogRepositor
         }
     }
 
-    override fun getUserProfile(): Flow<com.example.model.UserProfile?> {
-        if (auth.currentUser == null) return localFallback.getUserProfile()
-        return callbackFlow {
-            var listenerRegistration: ListenerRegistration? = null
-            val uid = auth.currentUser?.uid
-            if (uid != null) {
-                val docRef = firestore.collection("users").document(uid).collection("settings").document("userProfile")
-                listenerRegistration = docRef.addSnapshotListener { snapshot, e ->
+    override fun getUserProfile(): Flow<com.example.model.UserProfile?> = callbackFlow {
+        val localJob = launch {
+            localFallback.getUserProfile().collect {
+                trySend(it)
+            }
+        }
+        var registration: ListenerRegistration? = null
+        val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
+            registration?.remove()
+            val user = firebaseAuth.currentUser
+            if (user != null) {
+                val docRef = firestore.collection("users").document(user.uid).collection("settings").document("userProfile")
+                registration = docRef.addSnapshotListener { snapshot, e ->
                     if (e != null) {
-                        Log.w("FirebaseRepo", "Listen failed.", e)
-                        trySend(null)
+                        Log.e("FirebaseRepo", "Listen user profile error", e)
                         return@addSnapshotListener
                     }
                     if (snapshot != null && snapshot.exists()) {
-                        val profile = snapshot.toObject(com.example.model.UserProfile::class.java)
-                        trySend(profile)
-                    } else {
-                        trySend(null)
+                        try {
+                            val profile = snapshot.toObject(com.example.model.UserProfile::class.java)
+                            if (profile != null) {
+                                launch {
+                                    localFallback.saveUserProfile(profile)
+                                }
+                                trySend(profile)
+                            }
+                        } catch (ex: Exception) {
+                            Log.e("FirebaseRepo", "Deserializing user profile failed", ex)
+                        }
                     }
                 }
-            } else {
-                trySend(null)
             }
-            awaitClose { listenerRegistration?.remove() }
+        }
+        auth.addAuthStateListener(listener)
+        awaitClose {
+            auth.removeAuthStateListener(listener)
+            registration?.remove()
+            localJob.cancel()
         }
     }
 
     override suspend fun saveUserProfile(profile: com.example.model.UserProfile) {
+        localFallback.saveUserProfile(profile)
         if (auth.currentUser == null) {
-            localFallback.saveUserProfile(profile)
             return
         }
         val uid = auth.currentUser?.uid ?: return
