@@ -51,6 +51,7 @@ fun ActiveWorkoutScreen(
     var showAddExerciseDialog by remember { mutableStateOf(false) }
     var exerciseToSwapIndex by remember { mutableStateOf<Int?>(null) }
     var prs by remember { mutableStateOf<Map<String, com.example.model.PersonalRecord>>(emptyMap()) }
+    var showPlateCalcWeight by remember { mutableStateOf<Double?>(null) }
 
     LaunchedEffect(Unit) {
         launch { repository.getActiveWorkout().collect { activeWorkout = it } }
@@ -123,7 +124,8 @@ fun ActiveWorkoutScreen(
                             repository.saveWorkout(activeWorkout!!.copy(loggedExercises = updatedList))
                         }
                     },
-                    onSwap = { exerciseToSwapIndex = index }
+                    onSwap = { exerciseToSwapIndex = index },
+                    onCalculatePlates = { weight -> showPlateCalcWeight = weight }
                 )
             }
             item { Spacer(modifier = Modifier.height(100.dp)) }
@@ -241,6 +243,14 @@ fun ActiveWorkoutScreen(
             }
         )
     }
+
+    if (showPlateCalcWeight != null) {
+        com.example.ui.progress.PlateCalculatorDialog(
+            initialTargetWeight = showPlateCalcWeight!!,
+            isKgInitially = true,
+            onDismiss = { showPlateCalcWeight = null }
+        )
+    }
 }
 
 @Composable
@@ -249,7 +259,8 @@ fun LoggedExerciseCard(
     loggedExercise: LoggedExercise,
     pr: com.example.model.PersonalRecord? = null,
     onUpdate: (LoggedExercise) -> Unit,
-    onSwap: () -> Unit
+    onSwap: () -> Unit,
+    onCalculatePlates: (Double) -> Unit
 ) {
     val uriHandler = LocalUriHandler.current
     
@@ -307,6 +318,34 @@ fun LoggedExerciseCard(
                         color = Color.LightGray,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
+                }
+            }
+            
+            val isBarbell = remember(loggedExercise.exerciseName) {
+                val lower = loggedExercise.exerciseName.lowercase()
+                lower.contains("barbell") || lower.contains("squat") || lower.contains("press") || lower.contains("deadlift") || lower.contains("row") || lower.contains("bench") || lower.contains("rdl") || lower.contains("clean") || lower.contains("snatch") || lower.contains("smith") || lower.contains("thruster") || lower.contains("curl")
+            }
+
+            if (isBarbell) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(
+                        onClick = {
+                            val firstSetWeight = loggedExercise.sets.firstOrNull()?.weight ?: 100.0
+                            val targetWeight = if (firstSetWeight > 0) firstSetWeight else 100.0
+                            onCalculatePlates(targetWeight)
+                        },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "CALCULATE PLATES \uD83C\uDFCB\uFE0F",
+                            color = com.example.ui.theme.AccentGreen,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
             

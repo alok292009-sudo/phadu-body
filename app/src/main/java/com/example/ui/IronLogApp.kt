@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -49,85 +50,190 @@ import com.example.ui.progress.ProgressScreen
 import com.example.ui.workout.ActiveWorkoutScreen
 import kotlinx.coroutines.launch
 
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.text.style.TextAlign
+
 @Composable
 fun IronLogApp(repository: IronLogRepository) {
-    val navController = rememberNavController()
-    val auth = remember { FirebaseAuth.getInstance() }
-    var isInitialized by remember { mutableStateOf(false) }
-    var startDestination by remember { mutableStateOf("login") }
+    com.example.ui.error.ErrorBoundary {
+        val navController = rememberNavController()
+        val authContext = com.example.ui.auth.LocalAuthProvider.current
+        val auth = authContext.firebaseAuth
+        var isInitialized by remember { mutableStateOf(false) }
+        var startDestination by remember { mutableStateOf("login") }
+        var currentPhase by remember { mutableStateOf("Splash Screen") }
+        var initErrorLog by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
-        Log.d("IronLogApp", "=== APP STARTUP SEQUENCE INITIATED ===")
-        try {
-            // Step 1: Initialize / access Firebase App references
-            Log.d("IronLogApp", "Step 1: Referencing Firebase Application runtime setup...")
-            val app = auth.app
-            
-            // Step 2: Verify Firebase initialization
-            Log.d("IronLogApp", "Step 2: Verifying Firebase application instance active: name=${app.name}")
-            if (app.name.isEmpty()) {
-                throw IllegalStateException("Firebase instance has dry namespace execution!")
-            }
-            
-            // Step 3: Verify Auth initialization and config
-            Log.d("IronLogApp", "Step 3: Verifying FirebaseAuth provider bounds...")
-            if (auth.app != app) {
-                throw IllegalStateException("Firebase Authentication is disassociated from active Firebase App!")
-            }
-            
-            // Step 4: Check current user session status
-            val currentUser = auth.currentUser
-            Log.d("IronLogApp", "Step 4: Resolved session status. Auth user UID: ${currentUser?.uid ?: "Null (Anonymous/Logged-out)"}")
-            
-            if (currentUser != null) {
-                // Step 5: Load user profile with a 1.2s safety boundary to avoid suspending indefinitely on offline listener state
-                Log.d("IronLogApp", "Step 5: Loading user profile metadata from local fallback or cache channel...")
-                try {
-                    withTimeoutOrNull(1200L) {
-                        repository.getUserProfile().firstOrNull()
+        LaunchedEffect(authContext.isAuthResolved) {
+            if (!authContext.isAuthResolved) return@LaunchedEffect
+            Log.d("IronLogApp", "=== APP STARTUP SEQUENCE INITIATED ===")
+            try {
+                // Step 1: Splash Screen
+                currentPhase = "Splash Screen"
+                Log.d("IronLogApp", "[Startup Phase 1] Splash Screen starting")
+                kotlinx.coroutines.delay(600L) // Visual duration
+
+                // Step 2: Initialize Firebase
+                currentPhase = "Initialize Firebase"
+                Log.d("IronLogApp", "[Startup Phase 2] Initializing Firebase Core...")
+                val app = auth.app
+
+                // Step 3: Initialize Authentication
+                currentPhase = "Initialize Authentication"
+                Log.d("IronLogApp", "[Startup Phase 3] Initializing Firebase Authentication...")
+                if (auth.app != app) {
+                    throw IllegalStateException("Firebase Auth disassociated from active Firebase App!")
+                }
+
+                // Step 4: Verify Firebase Configuration
+                currentPhase = "Verify Firebase Configuration"
+                Log.d("IronLogApp", "[Startup Phase 4] Verifying Configuration...")
+                if (app.options.applicationId.isEmpty()) {
+                    throw IllegalStateException("Firebase Application ID is unconfigured or null!")
+                }
+
+                // Step 5: Load User
+                currentPhase = "Load User"
+                Log.d("IronLogApp", "[Startup Phase 5] Resolving Current Authenticated Session...")
+                val currentUser = authContext.currentUser
+                Log.d("IronLogApp", "Auth Session User: ${currentUser?.uid ?: "None (Guest/Logged out)"}")
+
+                if (currentUser != null) {
+                    // Step 6: Load Program State
+                    currentPhase = "Load Program State"
+                    Log.d("IronLogApp", "[Startup Phase 6] Retrieving user active program state with safety boundaries...")
+                    try {
+                        withTimeoutOrNull(1500L) {
+                            repository.getActiveProgramState().firstOrNull()
+                        }
+                    } catch (e: Exception) {
+                        Log.w("IronLogApp", "Active Program load timeout or warning: ${e.message}")
                     }
-                    Log.d("IronLogApp", "User profile payload retrieved or falling back safely")
-                } catch (e: Exception) {
-                    Log.w("IronLogApp", "User profile retrieval warning during startup sequence: ${e.message}")
+
+                    // Step 7: Load Local Cache
+                    currentPhase = "Load Local Cache"
+                    Log.d("IronLogApp", "[Startup Phase 7] Caching and seeding local exercise database...")
+                    try {
+                        withTimeoutOrNull(1500L) {
+                            repository.getUserProfile().firstOrNull()
+                        }
+                        repository.seedInitialExercises()
+                    } catch (e: Exception) {
+                        Log.w("IronLogApp", "Local cache loading encountered warnings: ${e.message}")
+                    }
+
+                    // Step 8: Navigate
+                    currentPhase = "Navigate"
+                    Log.d("IronLogApp", "[Startup Phase 8] Custom dashboard routing initiated for verified user")
+                    startDestination = "main"
+                } else {
+                    currentPhase = "Navigate"
+                    Log.d("IronLogApp", "[Startup Phase 8] Logging out or Guest mode. Routing to login screen")
+                    startDestination = "login"
                 }
                 
-                // Step 6: Load active program telemetry state with a 1.2s timeout
-                Log.d("IronLogApp", "Step 6: Loading workout programs state vectors...")
-                try {
-                    withTimeoutOrNull(1200L) {
-                        repository.getActiveProgramState().firstOrNull()
-                    }
-                    Log.d("IronLogApp", "Program state vectors retrieved or falling back safely")
-                } catch (e: Exception) {
-                    Log.w("IronLogApp", "Program state retrieval warning during startup sequence: ${e.message}")
-                }
-                
-                // Step 7: Decide output routing and execute navigate destination Choice
-                Log.d("IronLogApp", "Step 7: Executing startup navigation choice -> main dashboard screen")
-                startDestination = "main"
-            } else {
-                Log.d("IronLogApp", "Step 5: Skipping profile metadata (Signed Out)")
-                Log.d("IronLogApp", "Step 6: Skipping program state (Signed Out)")
-                Log.d("IronLogApp", "Step 7: Executing startup navigation choice -> landing credentials screen")
-                startDestination = "login"
+                isInitialized = true
+            } catch (e: Exception) {
+                Log.e("IronLogApp", "CRITICAL Crash safety boundary caught startup error", e)
+                initErrorLog = e.localizedMessage ?: "Unknown initialization failure"
+                // Ensure no full crash: screen is not frozen, bypass available.
             }
-        } catch (e: Exception) {
-            Log.e("IronLogApp", "CRITICAL: Firebase Auth startup sequence interrupted: ${e.localizedMessage}", e)
-            startDestination = "login" // Fallback safety route
-        } finally {
-            Log.d("IronLogApp", "=== APP STARTUP SEQUENCE COMPLETED ===")
-            isInitialized = true
         }
-    }
 
     if (!isInitialized) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black),
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color(0xFF0D0D11), Color.Black)
+                    )
+                )
+                .padding(24.dp),
             contentAlignment = Alignment.Center
         ) {
-            CircularProgressIndicator(color = Color.White)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Large Barbell branding
+                Row(
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 24.dp)
+                ) {
+                    Box(modifier = Modifier.width(8.dp).height(28.dp).background(Color(0xFF39FF14), RoundedCornerShape(2.dp)))
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Box(modifier = Modifier.width(5.dp).height(20.dp).background(Color(0xFF39FF14), RoundedCornerShape(1.dp)))
+                    Box(modifier = Modifier.width(36.dp).height(4.dp).background(Color.White))
+                    Box(modifier = Modifier.width(5.dp).height(20.dp).background(Color(0xFF39FF14), RoundedCornerShape(1.dp)))
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Box(modifier = Modifier.width(8.dp).height(28.dp).background(Color(0xFF39FF14), RoundedCornerShape(2.dp)))
+                }
+                Text(
+                    text = "GYM KRTA H JI",
+                    color = Color.White,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 2.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "PRECISION STRENGTH INTELLIGENCE",
+                    color = Color(0xFF39FF14),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
+
+                Spacer(modifier = Modifier.height(48.dp))
+
+                CircularProgressIndicator(
+                    color = Color(0xFF39FF14),
+                    strokeWidth = 3.dp,
+                    modifier = Modifier.size(36.dp)
+                )
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                Text(
+                    text = currentPhase.uppercase(),
+                    color = Color.LightGray,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.5.sp
+                )
+
+                initErrorLog?.let { err ->
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0x33FF3B30)),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, Color(0xFFFF3B30).copy(alpha = 0.5f))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("INIT DEGRADATION ENCOUNTERED", color = Color(0xFFFF453A), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(err, color = Color.White, fontSize = 11.sp, textAlign = TextAlign.Center)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(
+                        onClick = {
+                            startDestination = "login"
+                            isInitialized = true
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF39FF14), contentColor = Color.Black),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("BYPASS & PROCEED OFFLINE", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
         }
     } else {
         NavHost(
@@ -164,6 +270,7 @@ fun IronLogApp(repository: IronLogRepository) {
             }
         }
     }
+  }
 }
 
 @Composable
@@ -171,10 +278,28 @@ fun ProtectedRoute(
     navController: NavHostController,
     content: @Composable () -> Unit
 ) {
-    val auth = remember { FirebaseAuth.getInstance() }
-    val currentUser = auth.currentUser
+    val authContext = com.example.ui.auth.LocalAuthProvider.current
     
-    if (currentUser == null) {
+    if (!authContext.isAuthResolved) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator(color = Color(0xFF39FF14), strokeWidth = 3.dp)
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "RESOLVING IDENTITY STATE...",
+                    color = Color.Gray,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
+            }
+        }
+    } else if (authContext.currentUser == null) {
         LaunchedEffect(Unit) {
             navController.navigate("login") {
                 popUpTo(0) { inclusive = true }

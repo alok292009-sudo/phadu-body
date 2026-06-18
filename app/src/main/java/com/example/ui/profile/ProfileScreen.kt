@@ -919,12 +919,15 @@ fun DeveloperDiagnosticsDialog(
     
     // Test direct Firestore collection document write/read availability for Firestore Status
     var firestoreCheckStatus by remember { mutableStateOf("Testing network / write channels...") }
-    val diagnosticsTrace = remember {
+    val authContext = com.example.ui.auth.LocalAuthProvider.current
+    val diagnosticsTrace = remember(authContext) {
         val trace = StringBuilder()
         trace.append("Firebase Initialized: true\n")
         trace.append("Auth Handler Hash: ${auth.hashCode()}\n")
         trace.append("Firestore Handler Hash: ${firestore.hashCode()}\n")
         trace.append("Build Config Client ID: ${com.example.BuildConfig.WEB_CLIENT_ID}\n")
+        trace.append("AuthProvider Resolved: ${authContext.isAuthResolved}\n")
+        trace.append("AuthProvider Current User: ${authContext.currentUser?.uid ?: "None"}\n")
         trace.append("Registered Fallback ID matches Google Services Client ID: true\n")
         trace.toString()
     }
@@ -970,6 +973,20 @@ fun DeveloperDiagnosticsDialog(
                 )
                 
                 DiagnosticItem(title = "FIREBASE STATUS", value = "Online / Initialized successfully", isOk = true)
+                
+                DiagnosticItem(
+                    title = "AUTHPROVIDER STATE RESOLUTION",
+                    value = if (authContext.isAuthResolved) "RESOLVED (Ready, no race conditions)" else "UNRESOLVED / RESOLVING",
+                    isOk = authContext.isAuthResolved
+                )
+
+                DiagnosticItem(
+                    title = "WEB CLIENT ID DETECTION",
+                    value = if (authContext.webClientId.isNotBlank() && authContext.webClientId != "YOUR_WEB_CLIENT_ID_HERE") {
+                        "DETECTED: ${authContext.webClientId}"
+                    } else "NOT CONFIGURED - Using fallback client credentials ID",
+                    isOk = authContext.webClientId.isNotBlank() && authContext.webClientId != "YOUR_WEB_CLIENT_ID_HERE"
+                )
                 
                 DiagnosticItem(
                     title = "AUTH STATUS",

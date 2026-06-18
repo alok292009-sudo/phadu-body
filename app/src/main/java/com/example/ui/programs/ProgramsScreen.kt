@@ -53,7 +53,11 @@ fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) 
 
     // Navigation and state tracking
     var activeWeekIndex by remember { mutableStateOf(0) } // 0 to 11
-    var activeTabDay by remember { mutableStateOf("Mon") } // Mon, Tue, Wed, Thu, Fri, Sat, Sun
+    var activeTabDayIndex by remember { mutableStateOf(0) }
+
+    LaunchedEffect(activeWeekIndex) {
+        activeTabDayIndex = 0
+    }
 
     // Track chosen substitution active slot mappings: Key = Primary Exercise Name, Value = Chosen Active Exercise
     val activeSubstitutions = remember { mutableStateMapOf<String, ProgramExercise>() }
@@ -64,6 +68,7 @@ fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) 
     val completedSets = remember { mutableStateMapOf<String, Boolean>() }
 
     var showLoggedSuccessDialog by remember { mutableStateOf(false) }
+    var showPlateCalcWeight by remember { mutableStateOf<Double?>(null) }
 
     val activeProgramState by repository.getActiveProgramState().collectAsState(initial = null)
     var selectedProgramKey by remember { mutableStateOf<String?>(null) }
@@ -111,36 +116,20 @@ fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) 
         isLoading = false
     }
 
-    // Dynamic search mapping Monday - Sunday
-    val daysOfWeekList = listOf(
-        Pair("Mon", "Upper"),
-        Pair("Tue", "Lower"),
-        Pair("Wed", "Push"),
-        Pair("Thu", "Pull"),
-        Pair("Fri", "Legs"),
-        Pair("Sat", "Rest"),
-        Pair("Sun", "Rest")
-    )
-
     val currentWeekKey = "week${activeWeekIndex + 1}"
     val targetWeek = program?.weeks?.get(currentWeekKey)
+    val daysList = targetWeek?.days ?: emptyList()
 
-    val keyword = when (activeTabDay) {
-        "Mon" -> "Upper"
-        "Tue" -> "Lower"
-        "Wed" -> "Push"
-        "Thu" -> "Pull"
-        "Fri" -> "Legs"
-        else -> "Rest"
+    val daysOfWeekList = remember(daysList) {
+        val weekDaysAbbrevs = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+        daysList.mapIndexed { idx, day ->
+            val abbrev = if (idx < weekDaysAbbrevs.size) weekDaysAbbrevs[idx] else "Day ${idx + 1}"
+            Pair(abbrev, day.dayName)
+        }
     }
 
-    val mappedDay = remember(targetWeek, keyword, activeTabDay) {
-        if (keyword == "Rest") {
-            ProgramDay(dayName = "Rest & Recovery", isRestDay = true)
-        } else {
-            targetWeek?.days?.find { it.dayName.contains(keyword, ignoreCase = true) }
-                ?: ProgramDay(dayName = "$keyword Day", isRestDay = false)
-        }
+    val mappedDay = remember(daysList, activeTabDayIndex) {
+        daysList.getOrNull(activeTabDayIndex) ?: ProgramDay(dayName = "Rest & Recovery", isRestDay = true)
     }
 
     // Helper functions for estimated times
@@ -180,7 +169,7 @@ fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) 
     }
 
     // Move remember computations outside LazyColumn builder scope
-    val isGrouped = activeTabDay in listOf("Wed", "Thu", "Fri")
+    val isGrouped = remember(mappedDay) { mappedDay.exercises.any { it.muscleGroup?.isNotBlank() == true } }
     val groupedMap = remember(mappedDay, isGrouped) {
         val actualExercises = mappedDay.exercises
         if (isGrouped) {
@@ -433,13 +422,13 @@ fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) 
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        daysOfWeekList.forEach { (dayAbbrev, title) ->
-                            val isSelected = activeTabDay == dayAbbrev
+                        daysOfWeekList.forEachIndexed { idx, (dayAbbrev, title) ->
+                            val isSelected = activeTabDayIndex == idx
                             Card(
                                 modifier = Modifier
                                     .weight(1.0f)
                                     .padding(horizontal = 2.dp)
-                                    .clickable { activeTabDay = dayAbbrev },
+                                    .clickable { activeTabDayIndex = idx },
                                 colors = CardDefaults.cardColors(
                                     containerColor = if (isSelected) com.example.ui.theme.AccentGreen else com.example.ui.theme.GlassDark
                                 ),
@@ -458,10 +447,17 @@ fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) 
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = if (title == "Rest") "Rest" else title,
+                                        text = if (title.contains("Rest", true)) "REST" else {
+                                            if (title.contains("Upper", true)) "UPP"
+                                            else if (title.contains("Lower", true)) "LOW"
+                                            else if (title.contains("Push", true)) "PSH"
+                                            else if (title.contains("Pull", true)) "PLL"
+                                            else if (title.contains("Legs", true)) "LGS"
+                                            else "WKT"
+                                        },
                                         color = if (isSelected) Color.Black.copy(alpha = 0.8f) else com.example.ui.theme.GrayMedium,
                                         fontSize = 8.sp,
-                                        fontWeight = FontWeight.Medium
+                                        fontWeight = FontWeight.Bold
                                     )
                                 }
                             }
@@ -718,13 +714,42 @@ fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) 
 
                                     // 5. INLINE LOGGING INPUTS (weight, reps, complete per working set)
                                     val totalWorkingSets = parseWorkingSets(resolvedEx.workingSets)
-                                    Text(
-                                        text = "LOG WORKING SETS",
-                                        color = com.example.ui.theme.GrayMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 11.sp,
-                                        letterSpacing = 1.sp
-                                    )
+                                    
+                                    val isBarbell = remember(resolvedEx.name) {
+                                        val lower = resolvedEx.name.lowercase()
+                                        lower.contains("barbell") || lower.contains("squat") || lower.contains("press") || lower.contains("deadlift") || lower.contains("row") || lower.contains("bench") || lower.contains("rdl") || lower.contains("clean") || lower.contains("snatch") || lower.contains("smith") || lower.contains("thruster") || lower.contains("curl")
+                                    }
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "LOG WORKING SETS",
+                                            color = com.example.ui.theme.GrayMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            letterSpacing = 1.sp
+                                        )
+
+                                        if (isBarbell) {
+                                            TextButton(
+                                                onClick = {
+                                                    val typedWeight = loggedWeights["${resolvedEx.name}_set_1"]?.toDoubleOrNull() ?: 100.0
+                                                    showPlateCalcWeight = typedWeight
+                                                },
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(
+                                                    text = "CALCULATED PLATES \uD83C\uDFCB\uFE0F",
+                                                    color = com.example.ui.theme.AccentGreen,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
                                     Spacer(modifier = Modifier.height(8.dp))
                                     for (sNum in 1..totalWorkingSets) {
                                         val logKeyPrefix = "${resolvedEx.name}_set_${sNum}"
@@ -1007,6 +1032,14 @@ fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) 
                     Text("Crushed it!", fontWeight = FontWeight.Bold)
                 }
             }
+        )
+    }
+
+    if (showPlateCalcWeight != null) {
+        com.example.ui.progress.PlateCalculatorDialog(
+            initialTargetWeight = showPlateCalcWeight!!,
+            isKgInitially = true,
+            onDismiss = { showPlateCalcWeight = null }
         )
     }
 }

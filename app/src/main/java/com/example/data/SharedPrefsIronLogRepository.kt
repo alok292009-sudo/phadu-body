@@ -265,5 +265,17 @@ class SharedPrefsIronLogRepository(context: Context) : IronLogRepository {
         prefs.edit().putString("user_profile", moshi.adapter(UserProfile::class.java).toJson(profile)).apply()
     }
     
-    override suspend fun signOut() {}
+    override suspend fun signOut() {
+        try {
+            prefs.edit().clear().apply()
+            templatesState.value = emptyList()
+            workoutsState.value = emptyList()
+            exercisesState.value = emptyList()
+            prsState.value = emptyList()
+            activeProgramStateFlow.value = null
+            userProfileState.value = null
+        } catch (e: Exception) {
+            Log.e("SharedPrefsRepo", "Error resetting local state on signOut", e)
+        }
+    }
 }

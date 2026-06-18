@@ -328,15 +328,26 @@ fun OnboardingWizard(
                         Spacer(modifier = Modifier.height(16.dp))
                         
                         // Render days of week
-                        val weekdays = listOf(
-                            "Mon" to "Upper (Strength Focus)",
-                            "Tue" to "Lower (Strength Focus)",
-                            "Wed" to "Rest & Recovery Day",
-                            "Thu" to "Upper Body Hypertrophy",
-                            "Fri" to "Legs / Lower Body Focus",
-                            "Sat" to "Rest Day",
-                            "Sun" to "Rest Day"
-                        )
+                        val weekdays = remember(program) {
+                            val daysList = program?.weeks?.get("week1")?.days ?: emptyList()
+                            if (program != null && daysList.isNotEmpty()) {
+                                val abbreviations = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+                                daysList.mapIndexed { i, day ->
+                                    val abbrev = if (i < abbreviations.size) abbreviations[i] else "Day ${i + 1}"
+                                    abbrev to day.dayName
+                                }
+                            } else {
+                                listOf(
+                                    "Mon" to "Upper (Strength Focus)",
+                                    "Tue" to "Lower (Strength Focus)",
+                                    "Wed" to "Rest & Recovery Day",
+                                    "Thu" to "Push (Hypertrophy Focus)",
+                                    "Fri" to "Pull (Hypertrophy Focus)",
+                                    "Sat" to "Legs (Hypertrophy Focus)",
+                                    "Sun" to "Rest Day"
+                                )
+                            }
+                        }
                         Column(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxWidth()
@@ -721,7 +732,12 @@ fun DashboardContent(
                         } else if (day.isRestDay) {
                             Icon(Icons.Default.Favorite, contentDescription = "Rest", tint = Color.LightGray, modifier = Modifier.size(18.dp))
                         } else {
-                            val abbreviation = if (day.dayName.contains("Upper")) "UPP" else if (day.dayName.contains("Lower")) "LOW" else "WKT"
+                            val abbreviation = if (day.dayName.contains("Upper", true)) "UPP"
+                                               else if (day.dayName.contains("Lower", true)) "LOW"
+                                               else if (day.dayName.contains("Push", true)) "PSH"
+                                               else if (day.dayName.contains("Pull", true)) "PLL"
+                                               else if (day.dayName.contains("Legs", true)) "LGS"
+                                               else "WKT"
                             Text(abbreviation, fontWeight = FontWeight.Black, fontSize = 12.sp, color = Color.White)
                         }
                     }

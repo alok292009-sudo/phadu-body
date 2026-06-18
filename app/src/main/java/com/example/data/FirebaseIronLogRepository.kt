@@ -672,7 +672,7 @@ class FirebaseIronLogRepository(private val context: Context) : IronLogRepositor
             registration?.remove()
             val user = firebaseAuth.currentUser
             if (user != null) {
-                val docRef = firestore.collection("users").document(user.uid).collection("settings").document("userProfile")
+                val docRef = firestore.collection("users").document(user.uid)
                 registration = docRef.addSnapshotListener { snapshot, e ->
                     if (e != null) {
                         Log.e("FirebaseRepo", "Listen user profile error", e)
@@ -689,6 +689,26 @@ class FirebaseIronLogRepository(private val context: Context) : IronLogRepositor
                             }
                         } catch (ex: Exception) {
                             Log.e("FirebaseRepo", "Deserializing user profile failed", ex)
+                        }
+                    } else {
+                        // Fallback attempt to subcollection userProfile path
+                        val fallbackDocRef = firestore.collection("users").document(user.uid).collection("settings").document("userProfile")
+                        fallbackDocRef.get().addOnSuccessListener { fbSnap ->
+                            if (fbSnap != null && fbSnap.exists()) {
+                                try {
+                                    val profile = fbSnap.toObject(com.example.model.UserProfile::class.java)
+                                    if (profile != null) {
+                                        launch {
+                                            localFallback.saveUserProfile(profile)
+                                        }
+                                        trySend(profile)
+                                    }
+                                } catch (ex: Exception) {
+                                    Log.e("FirebaseRepo", "Deserializing fallback profile failed", ex)
+                                }
+                            }
+                        }.addOnFailureListener {
+                            Log.e("FirebaseRepo", "Fallback profile get failed", it)
                         }
                     }
                 }
@@ -709,6 +729,7 @@ class FirebaseIronLogRepository(private val context: Context) : IronLogRepositor
         }
         val uid = auth.currentUser?.uid ?: return
         try {
+            firestore.collection("users").document(uid).set(profile).await()
             firestore.collection("users").document(uid).collection("settings").document("userProfile")
                 .set(profile).await()
         } catch (e: Exception) {

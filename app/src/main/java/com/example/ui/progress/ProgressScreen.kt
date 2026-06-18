@@ -1096,98 +1096,151 @@ fun VisualBarbellSleeve(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(150.dp)
+            .height(140.dp)
             .background(com.example.ui.theme.GlassDark, RoundedCornerShape(16.dp))
             .border(1.dp, com.example.ui.theme.GlassBorderDark, RoundedCornerShape(16.dp)),
         contentAlignment = Alignment.Center
     ) {
-        Canvas(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        Canvas(modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp)) {
             val width = size.width
             val height = size.height
             val centerY = height / 2f
-            
-            // Draw shaft extending right
-            val sleeveLeft = 140f
-            val sleeveWidth = width - 180f
-            val sleeveHeight = 24f
-            
-            drawRect(
-                color = Color(0xFF6B6B76),
-                topLeft = Offset(sleeveLeft, centerY - sleeveHeight / 2f),
-                size = androidx.compose.ui.geometry.Size(sleeveWidth, sleeveHeight)
-            )
-            
-            // Draw inner barbell shaft going left
+
+            // 1. Draw central barbell steel bar shaft
             drawRect(
                 color = Color(0xFF45454F),
-                topLeft = Offset(0f, centerY - 16f / 2f),
-                size = androidx.compose.ui.geometry.Size(sleeveLeft, 16f)
+                topLeft = Offset(width * 0.05f, centerY - 4f),
+                size = androidx.compose.ui.geometry.Size(width * 0.9f, 8f)
             )
-            
-            // Draw collar stop
+
+            // 2. Collar Stops (Inner Stops centered symmetrically at 35% and 65%)
+            val leftCollarX = width * 0.35f
+            val rightCollarX = width * 0.65f
+
+            // Symmetrical Stops (Left and Right Collar sleeves)
             drawRoundRect(
-                color = Color(0xFF2C2C35),
-                topLeft = Offset(sleeveLeft - 24f, centerY - 64f),
-                size = androidx.compose.ui.geometry.Size(24f, 128f),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(6f, 6f)
+                color = Color(0xFF1E1E24),
+                topLeft = Offset(leftCollarX - 10f, centerY - 28f),
+                size = androidx.compose.ui.geometry.Size(10f, 56f),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f, 4f)
             )
-            
-            // Load plates side-by-side
-            var currentX = sleeveLeft + 4f
-            
-            itemsToDraw.forEach { plateWeight ->
-                val plateColor = getPlateColor(plateWeight, isKg)
-                val plateHeight = getPlateHeight(plateWeight, isKg)
-                val plateWidth = getPlateWidth(plateWeight, isKg)
-                
-                // Draw weight plate
+
+            drawRoundRect(
+                color = Color(0xFF1E1E24),
+                topLeft = Offset(rightCollarX, centerY - 28f),
+                size = androidx.compose.ui.geometry.Size(10f, 56f),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f, 4f)
+            )
+
+            // Inner sleeve extensions outwards
+            drawRect(
+                color = Color(0xFF78909C),
+                topLeft = Offset(width * 0.05f, centerY - 10f),
+                size = androidx.compose.ui.geometry.Size(leftCollarX - width * 0.05f - 10f, 20f)
+            )
+
+            drawRect(
+                color = Color(0xFF78909C),
+                topLeft = Offset(rightCollarX + 10f, centerY - 10f),
+                size = androidx.compose.ui.geometry.Size(width * 0.95f - rightCollarX - 10f, 20f)
+            )
+
+            // 3. Render plate loads symmetrically on both sides!
+            // RIGHT SLEEVE DRAW (Draws outwards from right collar)
+            var currentRightX = rightCollarX + 14f
+            itemsToDraw.forEach { plate ->
+                val color = getPlateColor(plate, isKg)
+                val h = getPlateHeight(plate, isKg) * 0.8f
+                val w = getPlateWidth(plate, isKg) * 0.7f
+
                 drawRoundRect(
-                    color = plateColor,
-                    topLeft = Offset(currentX, centerY - plateHeight / 2f),
-                    size = androidx.compose.ui.geometry.Size(plateWidth, plateHeight),
-                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f, 4f)
-                )
-                
-                // Silver ring hub center
-                drawCircle(
-                    color = Color(0xFFCFD8DC),
-                    radius = 9f,
-                    center = Offset(currentX + plateWidth / 2f, centerY)
-                )
-                
-                // Light inner shadow on plate for 3D bezel look
-                drawRect(
-                    color = Color.Black.copy(alpha = 0.15f),
-                    topLeft = Offset(currentX, centerY - plateHeight / 2f),
-                    size = androidx.compose.ui.geometry.Size(4f, plateHeight)
+                    color = color,
+                    topLeft = Offset(currentRightX, centerY - h / 2f),
+                    size = androidx.compose.ui.geometry.Size(w, h),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(3f, 3f)
                 )
 
-                // Label inside plate
-                val label = if (plateWeight % 1.0 == 0.0) "${plateWeight.toInt()}" else "$plateWeight"
+                // Silver center hub
+                drawCircle(
+                    color = Color(0xFFB0BEC5),
+                    radius = 3f,
+                    center = Offset(currentRightX + w / 2f, centerY)
+                )
+
+                // Draw small label
+                val label = if (plate % 1.0 == 0.0) "${plate.toInt()}" else "$plate"
                 val textPaint = android.graphics.Paint().apply {
-                    color = if (plateColor == Color.White || plateColor == Color(0xFFFFFFFF)) android.graphics.Color.BLACK else android.graphics.Color.WHITE
-                    textSize = 21f
+                    this.color = if (color == Color.White || color == Color(0xFFFFFFFF)) android.graphics.Color.BLACK else android.graphics.Color.WHITE
+                    textSize = 14f
                     isFakeBoldText = true
                     textAlign = android.graphics.Paint.Align.CENTER
                 }
-                
                 drawContext.canvas.nativeCanvas.drawText(
                     label,
-                    currentX + plateWidth / 2f,
-                    centerY + 7f,
+                    currentRightX + w / 2f,
+                    centerY + 5f,
                     textPaint
                 )
-                
-                currentX += plateWidth + 5f
+
+                currentRightX += w + 2f
             }
-            
-            // Collar clip clamp
-            if (itemsToDraw.isNotEmpty()) {
+
+            // LEFT SLEEVE DRAW (Symmetrical drawing going leftwards from left collar stop)
+            var currentLeftX = leftCollarX - 14f
+            itemsToDraw.forEach { plate ->
+                val color = getPlateColor(plate, isKg)
+                val h = getPlateHeight(plate, isKg) * 0.8f
+                val w = getPlateWidth(plate, isKg) * 0.7f
+
+                // In leftward loading, subtract the width FIRST to draw correctly from collar outwards
+                val startX = currentLeftX - w
                 drawRoundRect(
-                    color = Color(0xFFB0BEC5),
-                    topLeft = Offset(currentX + 2f, centerY - 28f),
-                    size = androidx.compose.ui.geometry.Size(12f, 56f),
+                    color = color,
+                    topLeft = Offset(startX, centerY - h / 2f),
+                    size = androidx.compose.ui.geometry.Size(w, h),
                     cornerRadius = androidx.compose.ui.geometry.CornerRadius(3f, 3f)
+                )
+
+                // Center hub
+                drawCircle(
+                    color = Color(0xFFB0BEC5),
+                    radius = 3f,
+                    center = Offset(startX + w / 2f, centerY)
+                )
+
+                // Label
+                val label = if (plate % 1.0 == 0.0) "${plate.toInt()}" else "$plate"
+                val textPaint = android.graphics.Paint().apply {
+                    this.color = if (color == Color.White || color == Color(0xFFFFFFFF)) android.graphics.Color.BLACK else android.graphics.Color.WHITE
+                    textSize = 14f
+                    isFakeBoldText = true
+                    textAlign = android.graphics.Paint.Align.CENTER
+                }
+                drawContext.canvas.nativeCanvas.drawText(
+                     label,
+                     startX + w / 2f,
+                     centerY + 5f,
+                     textPaint
+                )
+
+                currentLeftX -= (w + 2f)
+            }
+
+            // Clamps (collars) on collars outermost edges if loaded
+            if (itemsToDraw.isNotEmpty()) {
+                // right clamp
+                drawRoundRect(
+                    color = Color(0xFFCFD8DC),
+                    topLeft = Offset(currentRightX + 2f, centerY - 18f),
+                    size = androidx.compose.ui.geometry.Size(6f, 36f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f)
+                )
+                // left clamp
+                drawRoundRect(
+                    color = Color(0xFFCFD8DC),
+                    topLeft = Offset(currentLeftX - 8f, centerY - 18f),
+                    size = androidx.compose.ui.geometry.Size(6f, 36f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f)
                 )
             }
         }
