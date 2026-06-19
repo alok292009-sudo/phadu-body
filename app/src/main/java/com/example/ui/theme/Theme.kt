@@ -18,18 +18,18 @@ import androidx.compose.animation.core.Spring
 
 private val DarkColorScheme =
   darkColorScheme(
-    primary = PureWhite,
-    onPrimary = TrueBlack,
-    secondary = GrayLight,
-    onSecondary = TrueBlack,
-    background = TrueBlack,
-    surface = TrueBlack,
-    surfaceVariant = GrayDark,
-    onBackground = PureWhite,
-    onSurface = PureWhite,
-    onSurfaceVariant = GrayMedium,
-    outline = GlassBorderLight,
-    error = ErrorColor
+    primary = TextPrimaryColor,
+    onPrimary = BgColor,
+    secondary = TextSecondaryColor,
+    onSecondary = BgColor,
+    background = BgColor,
+    surface = BgColor,
+    surfaceVariant = SurfaceColor,
+    onBackground = TextPrimaryColor,
+    onSurface = TextPrimaryColor,
+    onSurfaceVariant = TextSecondaryColor,
+    outline = BorderColor,
+    error = DestructiveColor
   )
 
 @Composable

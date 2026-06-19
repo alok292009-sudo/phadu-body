@@ -49,55 +49,44 @@ fun RestTimerBar(
         enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
         exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
     ) {
-        Surface(
-            color = com.example.ui.theme.GlassDark,
-            border = BorderStroke(0.5.dp, com.example.ui.theme.GlassBorderDark),
-            modifier = Modifier.fillMaxWidth().height(56.dp)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .glassRecipe(androidx.compose.foundation.shape.RoundedCornerShape(IronCorner.RadiusMd))
+                .height(64.dp)
+                .bouncyClick { onDismiss() }
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                // Background progress bar
-                Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .fillMaxWidth(progress)
-                        .background(Color.White.copy(alpha = 0.2f))
-                )
                 
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 24.dp),
+                        .padding(horizontal = IronSpacing.x16),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        "REST TIMER",
-                        color = Color.White,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 13.sp,
-                        letterSpacing = 1.sp
+                        "Resting",
+                        style = IronTypography.Callout.copy(color = TextSecondaryColor)
                     )
                     
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        val mins = remainingSeconds / 60
-                        val secs = remainingSeconds % 60
-                        Text(
-                            String.format("%d:%02d", mins, secs),
-                            color = Color.White,
-                            fontWeight = FontWeight.Black,
-                            fontSize = 22.sp
-                        )
-                        Spacer(modifier = Modifier.width(24.dp))
-                        Icon(
-                            Icons.Outlined.Close,
-                            contentDescription = "Dismiss Timer",
-                            tint = Color.Gray,
-                            modifier = Modifier
-                                .size(28.dp)
-                                .bouncyClick { onDismiss() }
-                        )
-                    }
+                    val mins = remainingSeconds / 60
+                    val secs = remainingSeconds % 60
+                    Text(
+                        String.format("%d:%02d", mins, secs),
+                        style = IronTypography.Headline,
+                        color = TextPrimaryColor
+                    )
                 }
+
+                // White line moving across at the bottom
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth(progress)
+                        .height(2.dp)
+                        .background(Color.White)
+                )
             }
         }
     }

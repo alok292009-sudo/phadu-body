@@ -46,6 +46,7 @@ data class Workout(
 data class LoggedExercise(
     val exerciseId: String = "",
     val exerciseName: String = "",
+    val muscleGroup: String = "GENERAL",
     val videoUrl: String? = null,
     val sets: List<@JvmSuppressWildcards WorkoutSet> = emptyList(),
     val targetRestStr: String? = null,

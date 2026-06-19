@@ -14,6 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.util.Log
+import com.example.ui.theme.*
 
 data class ErrorHandlerContext(
     val reportError: (Throwable) -> Unit,
@@ -72,7 +73,7 @@ fun ErrorBoundary(
                     Spacer(modifier = Modifier.height(24.dp))
                     
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = com.example.ui.theme.GlassDark),
+                        colors = CardDefaults.cardColors(containerColor = BgColor),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {

@@ -19,13 +19,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.border
-import com.example.ui.theme.bounceClick
+import com.example.ui.theme.bouncyClick
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -47,6 +48,7 @@ import com.example.ui.home.HomeScreen
 import com.example.ui.history.HistoryScreen
 import com.example.ui.login.LoginScreen
 import com.example.ui.progress.ProgressScreen
+import com.example.ui.progress.PlateCalculatorScreen
 import com.example.ui.workout.ActiveWorkoutScreen
 import kotlinx.coroutines.launch
 
@@ -206,9 +208,9 @@ fun IronLogApp(repository: IronLogRepository) {
                 initErrorLog?.let { err ->
                     Spacer(modifier = Modifier.height(24.dp))
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = com.example.ui.theme.GlassDark),
+                        colors = CardDefaults.cardColors(containerColor = BgColor),
                         shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, Color(0xFFFF3B30).copy(alpha = 0.5f))
+                        border = BorderStroke(1.dp, DestructiveColor)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text("INIT DEGRADATION ENCOUNTERED", color = Color(0xFFFF453A), fontSize = 13.sp, fontWeight = FontWeight.Bold)
@@ -256,12 +258,20 @@ fun IronLogApp(repository: IronLogRepository) {
                 ProtectedRoute(navController = navController) {
                     ActiveWorkoutScreen(
                         repository = repository,
+                        onNavigateToPlateCalc = { navController.navigate("plate_calculator") },
                         onFinish = {
                             navController.popBackStack()
                         },
                         onBack = {
                             navController.popBackStack()
                         }
+                    )
+                }
+            }
+            composable("plate_calculator") {
+                ProtectedRoute(navController = navController) {
+                    PlateCalculatorScreen(
+                        onBack = { navController.popBackStack() }
                     )
                 }
             }
@@ -327,35 +337,25 @@ fun MainScreenWrapper(
         Triple("programs", Icons.Outlined.Assignment, "PROGRAM"),
         Triple("progress", Icons.Outlined.Timeline, "PROGRESS"),
         Triple("prs", Icons.Outlined.Star, "PRS"),
-        Triple("history", Icons.Outlined.History, "HISTORY"),
-        Triple("profile", Icons.Outlined.Person, "PROFILE")
+        Triple("history", Icons.Outlined.History, "HISTORY")
     )
 
     Scaffold(
-        containerColor = Color.Black,
+        containerColor = BgColor,
         bottomBar = {
-            // Elegant Backlit Frosted Glass Floating Tab Bar (iOS 27 Liquid Glass style)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color.Transparent)
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .padding(horizontal = IronSpacing.x16, vertical = IronSpacing.x8)
                     .navigationBarsPadding(),
                 contentAlignment = Alignment.Center
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(
-                            color = com.example.ui.theme.GlassDark,
-                            shape = RoundedCornerShape(24.dp)
-                        )
-                        .border(
-                            width = 0.5.dp,
-                            color = com.example.ui.theme.GlassBorderDark,
-                            shape = RoundedCornerShape(24.dp)
-                        )
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                        .glassRecipe(RoundedCornerShape(IronCorner.RadiusLg))
+                        .padding(horizontal = IronSpacing.x12, vertical = IronSpacing.x8),
                     horizontalArrangement = Arrangement.SpaceAround,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -364,11 +364,15 @@ fun MainScreenWrapper(
                     
                     items.forEach { (route, icon, label) ->
                         val isSelected = currentRoute == route
+                        val contentColor = if (isSelected) TextPrimaryColor else TextPrimaryColor.copy(alpha = 0.35f)
+                        
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
                             modifier = Modifier
                                 .weight(1f)
-                                .bounceClick {
+                                .heightIn(min = 44.dp)
+                                .bouncyClick {
                                     if (currentRoute != route) {
                                         bottomNavController.navigate(route) {
                                             popUpTo(bottomNavController.graph.startDestinationId) { saveState = true }
@@ -377,21 +381,18 @@ fun MainScreenWrapper(
                                         }
                                     }
                                 }
-                                .padding(vertical = 4.dp)
+                                .padding(vertical = IronSpacing.x4)
                         ) {
                             Icon(
                                 imageVector = icon,
                                 contentDescription = label,
-                                tint = if (isSelected) Color.White else Color.White.copy(alpha = 0.4f),
-                                modifier = Modifier.size(24.dp)
+                                tint = contentColor,
+                                modifier = Modifier.size(22.dp)
                             )
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(IronSpacing.x4))
                             Text(
                                 text = label,
-                                color = if (isSelected) Color.White else Color.White.copy(alpha = 0.4f),
-                                fontSize = 13.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                letterSpacing = 0.5.sp
+                                style = IronTypography.Caption.copy(color = contentColor)
                             )
                         }
                     }
@@ -468,6 +469,9 @@ fun MainScreenWrapper(
                         rootNavController.navigate("login") {
                             popUpTo(0) { inclusive = true }
                         }
+                    },
+                    onNavigateToPlateCalc = {
+                        rootNavController.navigate("plate_calculator")
                     }
                 )
             }
