@@ -708,15 +708,31 @@ fun DashboardClean(
                         
                         Spacer(modifier = Modifier.height(IronSpacing.x20))
                         
-                        if (selectedDayLocal.isRestDay) {
+                    if (selectedDayLocal.isRestDay) {
                             Spacer(modifier = Modifier.height(IronSpacing.x20))
-                            RestDayAnimation()
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(SuccessColor.copy(alpha = 0.05f), RoundedCornerShape(IronCorner.RadiusMd))
+                                    .border(1.dp, SuccessColor.copy(alpha = 0.1f), RoundedCornerShape(IronCorner.RadiusMd))
+                                    .padding(vertical = IronSpacing.x24),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    RestDayAnimation()
+                                    Spacer(modifier = Modifier.height(IronSpacing.x16))
+                                    Text(
+                                        "RECOVERY IN PROGRESS",
+                                        style = IronTypography.Headline.copy(color = SuccessColor, letterSpacing = 1.sp)
+                                    )
+                                }
+                            }
                             Spacer(modifier = Modifier.height(IronSpacing.x20))
                             Text(
-                                selectedDayLocal.recovery?.instructions ?: "Focus on sleep and mobility.",
+                                selectedDayLocal.recovery?.instructions ?: "Focus on deep sleep, hydration, and light mobility to ensure maximum hypertrophy and CNS recovery.",
                                 style = IronTypography.Body.copy(color = TextSecondaryColor, fontSize = 13.sp),
                                 textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = IronSpacing.x12)
                             )
                         } else {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(IronSpacing.x8)) {
@@ -735,17 +751,23 @@ fun DashboardClean(
                                 Text("RESUME LOGGING", style = IronTypography.Headline, color = BgColor)
                             }
                         } else if (selectedDayLocal.isRestDay) {
-                            Button(onClick = {
-                                coroutineScope.launch {
-                                    val nextSlot = (activeProgramState?.currentDaySlot ?: 0) + 1
-                                    val nextWeek = if (nextSlot >= 7) (activeProgramState?.currentWeek ?: 1) + 1 else activeProgramState?.currentWeek ?: 1
-                                    repository.saveActiveProgramState(activeProgramState?.copy(currentDaySlot = if (nextSlot >= 7) 0 else nextSlot, currentWeek = nextWeek))
-                                }
-                            }, modifier = Modifier.fillMaxWidth().height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = TextPrimaryColor), shape = RoundedCornerShape(IronCorner.RadiusMd)) {
+                            Button(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        val nextSlot = (activeProgramState?.currentDaySlot ?: 0) + 1
+                                        val nextWeek = if (nextSlot >= 7) (activeProgramState?.currentWeek ?: 1) + 1 else activeProgramState?.currentWeek ?: 1
+                                        repository.saveActiveProgramState(activeProgramState?.copy(currentDaySlot = if (nextSlot >= 7) 0 else nextSlot, currentWeek = nextWeek))
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.05f), contentColor = TextPrimaryColor),
+                                shape = RoundedCornerShape(IronCorner.RadiusMd),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
+                            ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Outlined.FastForward, contentDescription = null, tint = BgColor, modifier = Modifier.size(20.dp))
+                                    Icon(Icons.Outlined.FastForward, contentDescription = null, tint = TextPrimaryColor, modifier = Modifier.size(20.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text("SKIP REST DAY", style = IronTypography.Headline, color = BgColor)
+                                    Text("SKIP TO NEXT WORKOUT", style = IronTypography.Headline, color = TextPrimaryColor)
                                 }
                             }
                         } else {
