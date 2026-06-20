@@ -12,8 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Hotel
-import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -75,13 +74,27 @@ fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) 
         return
     }
 
-    val state = activeProgramState ?: ActiveProgramState(
-        programName = program?.programName ?: "Protocol",
-        currentWeek = 1,
-        currentDaySlot = 0,
-        completedWorkoutsMap = emptyMap(),
-        totalWeeks = program?.program?.durationWeeks ?: 12
-    )
+    val state = activeProgramState ?: run {
+        val calendar = java.util.Calendar.getInstance()
+        val currentDayOfWeek = calendar.get(java.util.Calendar.DAY_OF_WEEK)
+        val initialDaySlot = when (currentDayOfWeek) {
+            java.util.Calendar.MONDAY -> 0
+            java.util.Calendar.TUESDAY -> 1
+            java.util.Calendar.WEDNESDAY -> 2
+            java.util.Calendar.THURSDAY -> 3
+            java.util.Calendar.FRIDAY -> 4
+            java.util.Calendar.SATURDAY -> 5
+            java.util.Calendar.SUNDAY -> 6
+            else -> 0
+        }
+        ActiveProgramState(
+            programName = program?.programName ?: "Protocol",
+            currentWeek = 1,
+            currentDaySlot = initialDaySlot,
+            completedWorkoutsMap = emptyMap(),
+            totalWeeks = program?.program?.durationWeeks ?: 12
+        )
+    }
 
     val currentWeekKey = "week$selectedWeekOneIndexed"
     val daysList: List<com.example.model.ProgramDay> = currentWeekData?.days ?: emptyList()
@@ -187,11 +200,20 @@ fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) 
                 modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                val defaultDayLabels = mapOf(
+                    "Monday" to "Upper Body",
+                    "Tuesday" to "Lower Body",
+                    "Wednesday" to "Recovery",
+                    "Thursday" to "Pull",
+                    "Friday" to "Push",
+                    "Saturday" to "Legs",
+                    "Sunday" to "Recovery"
+                )
                 weekdayOrder.forEachIndexed { i, dayName ->
                     val isSelected = selectedDaySlot == i
                     val isCompleted = state.completedWorkoutsMap.containsKey("${currentWeekKey}_$i")
                     val isLocked = (selectedWeekOneIndexed > state.currentWeek) || (selectedWeekOneIndexed == state.currentWeek && i > state.currentDaySlot)
-                    val label = schema?.weekdayMap?.get(dayName) ?: dayName.substring(0, 3).uppercase()
+                    val label = schema?.weekdayMap?.get(dayName) ?: defaultDayLabels[dayName] ?: dayName.substring(0, 3).uppercase()
                     
                     Column(
                         modifier = Modifier
@@ -378,6 +400,31 @@ fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) 
                         Text("RECOVERY MODE", style = IronTypography.Headline, color = TextSecondaryColor)
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(day.recovery?.instructions ?: "Focus on sleep and hydration.", style = IronTypography.Footnote.copy(color = TextTertiaryColor, textAlign = TextAlign.Center))
+                        
+                        if (isCurrentTarget) {
+                            Spacer(modifier = Modifier.height(IronSpacing.x24))
+                            Button(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        val nextSlot = (state.currentDaySlot) + 1
+                                        val nextWeek = if (nextSlot >= 7) (state.currentWeek) + 1 else state.currentWeek
+                                        repository.saveActiveProgramState(state.copy(
+                                            currentDaySlot = if (nextSlot >= 7) 0 else nextSlot,
+                                            currentWeek = nextWeek
+                                        ))
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth().height(52.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = TextPrimaryColor, contentColor = BgColor),
+                                shape = RoundedCornerShape(IronCorner.RadiusMd)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Outlined.FastForward, contentDescription = null, tint = BgColor, modifier = Modifier.size(20.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("SKIP REST DAY", style = IronTypography.Headline, color = BgColor)
+                                }
+                            }
+                        }
                     }
                 }
             }

@@ -316,26 +316,32 @@ fun OnboardingView(
             }
 
             // 3. Training Split Visualization
-            val weekdayMap = schema?.weekdayMap
-            if (weekdayMap != null && weekdayMap.isNotEmpty()) {
-                Text(
-                    "TRAINING SPLIT",
-                    style = IronTypography.Caption.copy(color = TextTertiaryColor, letterSpacing = 2.sp),
-                    modifier = Modifier.padding(start = 4.dp)
+            Text(
+                "TRAINING SPLIT",
+                style = IronTypography.Caption.copy(color = TextTertiaryColor, letterSpacing = 2.sp),
+                modifier = Modifier.padding(start = 4.dp)
+            )
+            
+            PremiumCard {
+                val daysOrder = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+                val defaultMap = mapOf(
+                    "Monday" to "Upper Body",
+                    "Tuesday" to "Lower Body",
+                    "Wednesday" to "Recovery",
+                    "Thursday" to "Pull",
+                    "Friday" to "Push",
+                    "Saturday" to "Legs",
+                    "Sunday" to "Recovery"
                 )
-                
-                PremiumCard {
-                    val daysOrder = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
-                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        daysOrder.forEach { dayName ->
-                            val label = weekdayMap[dayName] ?: "Rest"
-                            val isRest = label.contains("Rest", ignoreCase = true) || label.contains("Recovery", ignoreCase = true)
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(dayName.substring(0, 3).uppercase(), style = IronTypography.Caption.copy(color = TextTertiaryColor, fontWeight = FontWeight.Bold), modifier = Modifier.width(48.dp))
-                                Box(modifier = Modifier.size(6.dp).background(if (isRest) TextTertiaryColor.copy(alpha = 0.3f) else TextPrimaryColor, RoundedCornerShape(3.dp)))
-                                Spacer(modifier = Modifier.width(16.dp))
-                                Text(label, style = IronTypography.Callout.copy(color = if (isRest) TextTertiaryColor else TextPrimaryColor))
-                            }
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    daysOrder.forEach { dayName ->
+                        val label = schema?.weekdayMap?.get(dayName) ?: defaultMap[dayName] ?: "Rest"
+                        val isRest = label.contains("Rest", ignoreCase = true) || label.contains("Recovery", ignoreCase = true)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(dayName.substring(0, 3).uppercase(), style = IronTypography.Caption.copy(color = TextTertiaryColor, fontWeight = FontWeight.Bold), modifier = Modifier.width(48.dp))
+                            Box(modifier = Modifier.size(6.dp).background(if (isRest) TextTertiaryColor.copy(alpha = 0.3f) else TextPrimaryColor, RoundedCornerShape(3.dp)))
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text(label, style = IronTypography.Callout.copy(color = if (isRest) TextTertiaryColor else TextPrimaryColor))
                         }
                     }
                 }
@@ -396,11 +402,24 @@ fun OnboardingView(
                         Log.d("IronLogDiagnostics", "Initialize Button Pressed")
                         initState = InitializeState.Processing
                         
+                        val calendar = Calendar.getInstance()
+                        val currentDayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
+                        val initialDaySlot = when (currentDayOfWeek) {
+                            Calendar.MONDAY -> 0
+                            Calendar.TUESDAY -> 1
+                            Calendar.WEDNESDAY -> 2
+                            Calendar.THURSDAY -> 3
+                            Calendar.FRIDAY -> 4
+                            Calendar.SATURDAY -> 5
+                            Calendar.SUNDAY -> 6
+                            else -> 0
+                        }
+
                         val state = ActiveProgramState(
                             programName = p.programName.ifEmpty { "bodybuilding_transformation" },
                             author = p.program?.author ?: "JEFF NIPPARD",
                             currentWeek = 1,
-                            currentDaySlot = 0,
+                            currentDaySlot = initialDaySlot,
                             completedWorkoutsMap = emptyMap(),
                             startDate = System.currentTimeMillis(),
                             totalWeeks = if (p.durationWeeks > 0) p.durationWeeks else 12,
@@ -575,6 +594,9 @@ fun DashboardClean(
     }
     val totalWorkouts = workoutsList.count { it.status == "completed" }
 
+    val dayNames = listOf("MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY")
+    val currentSlotDayName = dayNames.getOrNull(targetDayIndex) ?: "REST DAY"
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -632,6 +654,11 @@ fun DashboardClean(
             PremiumCard(modifier = Modifier.padding(bottom = IronSpacing.x24)) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
                     Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = currentSlotDayName,
+                            style = IronTypography.Micro.copy(color = TextPrimaryColor, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
                         AutoResizingText(
                             text = if (selectedDay.isRestDay) "REST & REFUEL" else selectedDay.displayName.ifEmpty { selectedDay.trainingDay },
                             style = IronTypography.Heading,
@@ -678,8 +705,12 @@ fun DashboardClean(
                             val nextWeek = if (nextSlot >= 7) (activeProgramState?.currentWeek ?: 1) + 1 else activeProgramState?.currentWeek ?: 1
                             repository.saveActiveProgramState(activeProgramState?.copy(currentDaySlot = if (nextSlot >= 7) 0 else nextSlot, currentWeek = nextWeek))
                         }
-                    }, modifier = Modifier.fillMaxWidth().height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.05f)), shape = RoundedCornerShape(IronCorner.RadiusMd)) {
-                        Text("SKIP REST", style = IronTypography.Headline)
+                    }, modifier = Modifier.fillMaxWidth().height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = TextPrimaryColor), shape = RoundedCornerShape(IronCorner.RadiusMd)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Outlined.FastForward, contentDescription = null, tint = BgColor, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("SKIP REST DAY", style = IronTypography.Headline, color = BgColor)
+                        }
                     }
                 } else {
                     Button(onClick = {
