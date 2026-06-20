@@ -28,9 +28,12 @@ import com.example.model.Exercise
 import com.example.model.PersonalRecord
 import com.example.model.Workout
 import com.example.ui.theme.*
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -67,6 +70,15 @@ fun ProgressScreen(repository: IronLogRepository) {
         ) {
             item {
                 if (history.isNotEmpty()) {
+                    Text("VOLUME BY FOCUS (PAST WEEK)", style = IronTypography.Caption.copy(color = TextTertiaryColor))
+                    Spacer(modifier = Modifier.height(IronSpacing.x12))
+                    WeeklyFocusVolumeChart(history)
+                }
+                Spacer(modifier = Modifier.height(IronSpacing.x32))
+            }
+
+            item {
+                if (history.isNotEmpty()) {
                     Text("VOLUME HISTORY", style = IronTypography.Caption.copy(color = TextTertiaryColor))
                     Spacer(modifier = Modifier.height(IronSpacing.x12))
                     VolumeDashboardCustom(history)
@@ -97,6 +109,157 @@ fun ProgressScreen(repository: IronLogRepository) {
                     ) {
                         list.forEach { ex ->
                             ProgressSwipeableCard(ex = ex, history = history)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun WeeklyFocusVolumeChart(history: List<Workout>) {
+    val weekHistory = remember(history) {
+        val cal = Calendar.getInstance()
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        cal.add(Calendar.DAY_OF_YEAR, -6)
+        val startTime = cal.timeInMillis
+        history.filter { it.date >= startTime }
+    }
+
+    val volumeByDay = remember(weekHistory) {
+        val map = mutableMapOf<Int, Double>()
+        val todayStart = Calendar.getInstance().apply { 
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        val sixDaysAgo = todayStart - 6 * 24 * 60 * 60 * 1000L
+        
+        for (i in 0..6) map[i] = 0.0
+        
+        weekHistory.forEach { workout ->
+            val daysDiff = ((workout.date - sixDaysAgo) / (24 * 60 * 60 * 1000L)).toInt()
+            if (daysDiff in 0..6) {
+                map[daysDiff] = (map[daysDiff] ?: 0.0) + workout.totalVolume
+            }
+        }
+        map.values.toList()
+    }
+
+    val focusByDay = remember(weekHistory) {
+        val map = mutableMapOf<Int, String>()
+        val todayStart = Calendar.getInstance().apply { 
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        val sixDaysAgo = todayStart - 6 * 24 * 60 * 60 * 1000L
+        
+        for (i in 0..6) map[i] = "Rest"
+        
+        weekHistory.forEach { workout ->
+            val daysDiff = ((workout.date - sixDaysAgo) / (24 * 60 * 60 * 1000L)).toInt()
+            if (daysDiff in 0..6) {
+                if (map[daysDiff] == "Rest") {
+                    map[daysDiff] = workout.templateName ?: "Workout"
+                }
+            }
+        }
+        map.values.toList()
+    }
+
+    val maxVolume = remember(volumeByDay) { volumeByDay.maxOfOrNull { it }?.coerceAtLeast(1.0) ?: 1.0 }
+    
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .glassRecipe(RoundedCornerShape(IronCorner.RadiusLg))
+            .padding(IronSpacing.x24)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(160.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                volumeByDay.forEachIndexed { index, volume ->
+                    val heightFactor = if (maxVolume > 0) (volume / maxVolume).toFloat() else 0f
+                    val dayName = remember(index) {
+                        val cal = Calendar.getInstance()
+                        val todayStart = Calendar.getInstance().apply { 
+                            set(Calendar.HOUR_OF_DAY, 0)
+                            set(Calendar.MINUTE, 0)
+                            set(Calendar.SECOND, 0)
+                            set(Calendar.MILLISECOND, 0)
+                        }.timeInMillis
+                        val dayTime = todayStart - (6 - index) * 24 * 60 * 60 * 1000L
+                        cal.timeInMillis = dayTime
+                        when(cal.get(Calendar.DAY_OF_WEEK)) {
+                            Calendar.SUNDAY -> "S"
+                            Calendar.MONDAY -> "M"
+                            Calendar.TUESDAY -> "T"
+                            Calendar.WEDNESDAY -> "W"
+                            Calendar.THURSDAY -> "T"
+                            Calendar.FRIDAY -> "F"
+                            Calendar.SATURDAY -> "S"
+                            else -> ""
+                        }
+                    }
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Bottom,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        if (volume > 0) {
+                            Text(
+                                text = "${volume.toInt()}",
+                                style = IronTypography.Micro.copy(color = TextTertiaryColor),
+                                modifier = Modifier.padding(bottom = 4.dp)
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.5f)
+                                .height(120.dp * heightFactor + 4.dp)
+                                .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 4.dp, bottomEnd = 4.dp))
+                                .background(if (volume > 0) Color.White else Color.White.copy(alpha = 0.05f))
+                        )
+                        Spacer(modifier = Modifier.height(IronSpacing.x8))
+                        Text(dayName, style = IronTypography.Caption.copy(color = if (volume > 0) TextPrimaryColor else TextSecondaryColor))
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(IronSpacing.x24))
+            
+            // Legend
+            Text("DAILY FOCUS", style = IronTypography.Micro.copy(color = TextSecondaryColor, letterSpacing = 2.sp))
+            Spacer(modifier = Modifier.height(IronSpacing.x8))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(IronSpacing.x12)
+            ) {
+                volumeByDay.forEachIndexed { index, volume ->
+                    if (volume > 0) {
+                        val focus = focusByDay[index]
+                        Column(
+                            modifier = Modifier
+                                .glassRecipe(RoundedCornerShape(IronCorner.RadiusSm))
+                                .padding(horizontal = IronSpacing.x12, vertical = IronSpacing.x8)
+                        ) {
+                            Text(focus.uppercase(), style = IronTypography.Micro.copy(color = TextPrimaryColor, fontWeight = FontWeight.Bold))
+                            Text("${volume.toInt()}kg", style = IronTypography.Caption.copy(color = TextSecondaryColor))
                         }
                     }
                 }

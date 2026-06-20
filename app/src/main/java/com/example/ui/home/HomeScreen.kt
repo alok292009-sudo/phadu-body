@@ -20,6 +20,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.animation.core.tween
 import com.example.data.IronLogRepository
 import com.example.model.*
 import com.squareup.moshi.Moshi
@@ -548,16 +551,6 @@ fun DashboardClean(
     
     var showWarmupDialog by remember { mutableStateOf(false) }
 
-    val greeting = remember {
-        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        when (hour) {
-            in 0..11 -> "SHUBH PRABHAT"
-            in 12..16 -> "SHUBH DOPAHAR"
-            in 17..20 -> "SHUBH SANDHYA"
-            else -> "SHUBH RATRI"
-        }
-    }
-
     val currentStreak = remember(workoutsList) {
         val completed = workoutsList.filter { it.status == "completed" }
         val sdfDay = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
@@ -616,7 +609,6 @@ fun DashboardClean(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
-                Text(greeting, style = IronTypography.Caption.copy(color = TextSecondaryColor, letterSpacing = 1.sp, fontSize = 9.sp))
                 Text("GYM KRTA H JI", style = IronTypography.Title.copy(letterSpacing = 1.5.sp), fontWeight = FontWeight.Black)
             }
             Box(
@@ -645,79 +637,101 @@ fun DashboardClean(
         }
 
         // Hero card (Mission)
-        if (selectedDay != null) {
-            Text(
-                if (selectedDay.isRestDay) "RECOVERY" else "MISSION",
-                style = IronTypography.Caption.copy(color = TextTertiaryColor, letterSpacing = 2.sp),
-                modifier = Modifier.padding(bottom = 12.dp, start = 4.dp)
-            )
-            PremiumCard(modifier = Modifier.padding(bottom = IronSpacing.x24)) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = currentSlotDayName,
-                            style = IronTypography.Micro.copy(color = TextPrimaryColor, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        AutoResizingText(
-                            text = if (selectedDay.isRestDay) "REST & REFUEL" else selectedDay.displayName.ifEmpty { selectedDay.trainingDay },
-                            style = IronTypography.Heading,
-                            maxLines = 1
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            "WEEK ${activeProgramState?.currentWeek ?: 1} • SESSION ${targetDayIndex + 1}",
-                            style = IronTypography.Micro.copy(color = TextSecondaryColor, letterSpacing = 1.sp)
-                        )
-                    }
-                    Box(modifier = Modifier.background(SuccessColor.copy(alpha = 0.1f), RoundedCornerShape(IronCorner.RadiusFull)).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                        Text("TARGET", style = IronTypography.Caption.copy(color = SuccessColor, fontSize = 9.sp))
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(IronSpacing.x20))
-                
-                if (selectedDay.isRestDay) {
+        val missionKey = activeProgramState?.let { "${it.currentWeek}_${it.currentDaySlot}" } ?: "no_program"
+        AnimatedContent(
+            targetState = missionKey,
+            transitionSpec = {
+                (slideInHorizontally { it } + fadeIn(tween(300))).togetherWith(slideOutHorizontally { -it } + fadeOut(tween(300)))
+            },
+            label = "mission_card_transition"
+        ) { _ ->
+            val targetWeek = activeProgramState?.currentWeek ?: 1
+            val targetDayIndex = activeProgramState?.currentDaySlot ?: 0
+            val daysListLocal = currentWeekData?.days ?: emptyList()
+            val selectedDayLocal = daysListLocal.getOrNull(targetDayIndex)
+            val currentSlotDayNameLocal = dayNames.getOrNull(targetDayIndex) ?: "REST DAY"
+
+            if (selectedDayLocal != null) {
+                Column {
                     Text(
-                        selectedDay.recovery?.instructions ?: "Focus on sleep and mobility.",
-                        style = IronTypography.Body.copy(color = TextSecondaryColor, fontSize = 13.sp)
+                        if (selectedDayLocal.isRestDay) "RECOVERY" else "MISSION",
+                        style = IronTypography.Caption.copy(color = TextTertiaryColor, letterSpacing = 2.sp),
+                        modifier = Modifier.padding(bottom = 12.dp, start = 4.dp)
                     )
-                } else {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(IronSpacing.x8)) {
-                        selectedDay.exercises.mapNotNull { it.muscleGroup }.distinct().take(3).forEach { m ->
-                            Box(modifier = Modifier.border(0.5.dp, Color.White.copy(alpha=0.1f), RoundedCornerShape(IronCorner.RadiusSm)).padding(horizontal = 8.dp, vertical = 4.dp)) {
-                                Text(m.uppercase(), style = IronTypography.Micro.copy(color = TextSecondaryColor))
+                    PremiumCard(modifier = Modifier.padding(bottom = IronSpacing.x24)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = currentSlotDayNameLocal,
+                                    style = IronTypography.Micro.copy(color = TextPrimaryColor, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                AutoResizingText(
+                                    text = if (selectedDayLocal.isRestDay) "REST & REFUEL" else selectedDayLocal.displayName.ifEmpty { selectedDayLocal.trainingDay },
+                                    style = IronTypography.Heading,
+                                    maxLines = 1
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    "WEEK $targetWeek • SESSION ${targetDayIndex + 1}",
+                                    style = IronTypography.Micro.copy(color = TextSecondaryColor, letterSpacing = 1.sp)
+                                )
+                            }
+                            Box(modifier = Modifier.background(SuccessColor.copy(alpha = 0.1f), RoundedCornerShape(IronCorner.RadiusFull)).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                                Text("TARGET", style = IronTypography.Caption.copy(color = SuccessColor, fontSize = 9.sp))
                             }
                         }
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(IronSpacing.x24))
-                
-                if (activeWorkout != null) {
-                    Button(onClick = onResumeWorkout, modifier = Modifier.fillMaxWidth().height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = TextPrimaryColor, contentColor = BgColor), shape = RoundedCornerShape(IronCorner.RadiusMd)) {
-                        Text("RESUME LOGGING", style = IronTypography.Headline, color = BgColor)
-                    }
-                } else if (selectedDay.isRestDay) {
-                    Button(onClick = {
-                        coroutineScope.launch {
-                            val nextSlot = (activeProgramState?.currentDaySlot ?: 0) + 1
-                            val nextWeek = if (nextSlot >= 7) (activeProgramState?.currentWeek ?: 1) + 1 else activeProgramState?.currentWeek ?: 1
-                            repository.saveActiveProgramState(activeProgramState?.copy(currentDaySlot = if (nextSlot >= 7) 0 else nextSlot, currentWeek = nextWeek))
+                        
+                        Spacer(modifier = Modifier.height(IronSpacing.x20))
+                        
+                        if (selectedDayLocal.isRestDay) {
+                            Spacer(modifier = Modifier.height(IronSpacing.x20))
+                            RestDayAnimation()
+                            Spacer(modifier = Modifier.height(IronSpacing.x20))
+                            Text(
+                                selectedDayLocal.recovery?.instructions ?: "Focus on sleep and mobility.",
+                                style = IronTypography.Body.copy(color = TextSecondaryColor, fontSize = 13.sp),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        } else {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(IronSpacing.x8)) {
+                                selectedDayLocal.exercises.mapNotNull { it.muscleGroup }.distinct().take(3).forEach { m ->
+                                    Box(modifier = Modifier.border(0.5.dp, Color.White.copy(alpha=0.1f), RoundedCornerShape(IronCorner.RadiusSm)).padding(horizontal = 8.dp, vertical = 4.dp)) {
+                                        Text(m.uppercase(), style = IronTypography.Micro.copy(color = TextSecondaryColor))
+                                    }
+                                }
+                            }
                         }
-                    }, modifier = Modifier.fillMaxWidth().height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = TextPrimaryColor), shape = RoundedCornerShape(IronCorner.RadiusMd)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Outlined.FastForward, contentDescription = null, tint = BgColor, modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("SKIP REST DAY", style = IronTypography.Headline, color = BgColor)
+                        
+                        Spacer(modifier = Modifier.height(IronSpacing.x24))
+                        
+                        if (activeWorkout != null) {
+                            Button(onClick = onResumeWorkout, modifier = Modifier.fillMaxWidth().height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = TextPrimaryColor, contentColor = BgColor), shape = RoundedCornerShape(IronCorner.RadiusMd)) {
+                                Text("RESUME LOGGING", style = IronTypography.Headline, color = BgColor)
+                            }
+                        } else if (selectedDayLocal.isRestDay) {
+                            Button(onClick = {
+                                coroutineScope.launch {
+                                    val nextSlot = (activeProgramState?.currentDaySlot ?: 0) + 1
+                                    val nextWeek = if (nextSlot >= 7) (activeProgramState?.currentWeek ?: 1) + 1 else activeProgramState?.currentWeek ?: 1
+                                    repository.saveActiveProgramState(activeProgramState?.copy(currentDaySlot = if (nextSlot >= 7) 0 else nextSlot, currentWeek = nextWeek))
+                                }
+                            }, modifier = Modifier.fillMaxWidth().height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = TextPrimaryColor), shape = RoundedCornerShape(IronCorner.RadiusMd)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Outlined.FastForward, contentDescription = null, tint = BgColor, modifier = Modifier.size(20.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("SKIP REST DAY", style = IronTypography.Headline, color = BgColor)
+                                }
+                            }
+                        } else {
+                            Button(onClick = {
+                                val newW = selectedDayLocal.toWorkout(weekKey, targetDayIndex)
+                                onStartWorkout(newW)
+                            }, modifier = Modifier.fillMaxWidth().height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = TextPrimaryColor, contentColor = BgColor), shape = RoundedCornerShape(IronCorner.RadiusMd)) {
+                                Text("BEGIN SESSION", style = IronTypography.Headline, color = BgColor)
+                            }
                         }
-                    }
-                } else {
-                    Button(onClick = {
-                        val newW = selectedDay.toWorkout(weekKey, targetDayIndex)
-                        onStartWorkout(newW)
-                    }, modifier = Modifier.fillMaxWidth().height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = TextPrimaryColor, contentColor = BgColor), shape = RoundedCornerShape(IronCorner.RadiusMd)) {
-                        Text("BEGIN SESSION", style = IronTypography.Headline, color = BgColor)
                     }
                 }
             }
@@ -797,3 +811,62 @@ fun DashboardClean(
         )
     }
 }
+
+
+@Composable
+fun RestDayAnimation() {
+    val infiniteTransition = rememberInfiniteTransition(label = "rest_pulse")
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = LinearOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "scale"
+    )
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = LinearOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "alpha"
+    )
+
+    Box(
+        modifier = Modifier.fillMaxWidth().height(120.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        // Pulse circles
+        Box(
+            modifier = Modifier
+                .size(100.dp * scale)
+                .background(SuccessColor.copy(alpha = alpha), RoundedCornerShape(IronCorner.RadiusFull))
+        )
+        Box(
+            modifier = Modifier
+                .size(70.dp * scale * 0.8f)
+                .background(SuccessColor.copy(alpha = alpha * 1.5f), RoundedCornerShape(IronCorner.RadiusFull))
+        )
+        
+        // Icon
+        Surface(
+            modifier = Modifier.size(64.dp),
+            shape = RoundedCornerShape(IronCorner.RadiusFull),
+            color = Color.White.copy(alpha = 0.05f),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Outlined.Hotel,
+                    contentDescription = null,
+                    tint = SuccessColor,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+        }
+    }
+}
+

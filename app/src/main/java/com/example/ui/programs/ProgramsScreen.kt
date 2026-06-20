@@ -23,6 +23,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import com.example.data.IronLogRepository
 import com.example.model.ActiveProgramState
 import com.example.model.Program
@@ -264,164 +266,178 @@ fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) 
 
             Spacer(modifier = Modifier.height(IronSpacing.x24))
 
-            val day = daysList.getOrNull(selectedDaySlot)
-            if (day != null) {
-                // Selected Day Summary
-                val isCurrentTarget = selectedWeekOneIndexed == state.currentWeek && selectedDaySlot == state.currentDaySlot
-                val isPast = (selectedWeekOneIndexed < state.currentWeek) || (selectedWeekOneIndexed == state.currentWeek && selectedDaySlot < state.currentDaySlot)
-                
-                PremiumCard {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Box(modifier = Modifier.width(3.dp).height(20.dp).background(if (isCurrentTarget) TextPrimaryColor else if (isPast) SuccessColor else TextTertiaryColor, RoundedCornerShape(2.dp)))
-                            Spacer(modifier = Modifier.width(12.dp))
-                            AutoResizingText(day.displayName.ifEmpty { day.trainingDay }.uppercase(), style = IronTypography.Title, maxLines = 1)
-                        }
+            AnimatedContent(
+                targetState = selectedWeekOneIndexed to selectedDaySlot,
+                transitionSpec = {
+                    if (targetState.first > initialState.first || (targetState.first == initialState.first && targetState.second > initialState.second)) {
+                        (slideInHorizontally { it } + fadeIn(tween(300))).togetherWith(slideOutHorizontally { -it } + fadeOut(tween(300)))
+                    } else {
+                        (slideInHorizontally { -it } + fadeIn(tween(300))).togetherWith(slideOutHorizontally { it } + fadeOut(tween(300)))
+                    }.using(SizeTransform(clip = false))
+                },
+                label = "day_content"
+            ) { (targetWeek, targetDay) ->
+                val day = daysList.getOrNull(targetDay)
+                if (day != null) {
+                    Column {
+                        // Selected Day Summary
+                        val isCurrentTarget = targetWeek == state.currentWeek && targetDay == state.currentDaySlot
+                        val isPast = (targetWeek < state.currentWeek) || (targetWeek == state.currentWeek && targetDay < state.currentDaySlot)
                         
-                        if (day.isRestDay) {
-                            Icon(Icons.Outlined.Hotel, contentDescription = null, tint = TextTertiaryColor, modifier = Modifier.size(18.dp))
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(IronSpacing.x20))
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        val statModifier = Modifier.weight(1f)
-                        StatCard(label = "TYPE", value = if (day.isRestDay) "REST" else day.trainingDay.uppercase(), modifier = statModifier)
-                        StatCard(label = "LOAD", value = if (day.isRestDay) "--" else "${day.exercises.size} EXS", modifier = statModifier)
-                        StatCard(label = "STATUS", value = if (isPast) "DONE" else if (isCurrentTarget) "READY" else "LOCKED", modifier = statModifier)
-                    }
-                    
-                    if (!day.isRestDay && isCurrentTarget) {
-                        Spacer(modifier = Modifier.height(IronSpacing.x20))
-                        Button(
-                            onClick = {
-                                var newW = day.toWorkout(currentWeekKey, selectedDaySlot)
-                                val completedWorkouts = workoutsList.filter { it.status == "completed" }.sortedByDescending { it.date }
-                                
-                                val newExs = newW.loggedExercises.map { ex ->
-                                    val lastEx = completedWorkouts.mapNotNull { w -> w.loggedExercises.find { it.exerciseId == ex.exerciseId } }.firstOrNull()
-                                    if (lastEx != null) {
-                                        val newSets = ex.sets.map { set ->
-                                            val pastSet = lastEx.sets.find { it.isWarmup == set.isWarmup && it.setNumber == set.setNumber }
-                                                ?: lastEx.sets.lastOrNull { it.isWarmup == set.isWarmup }
-                                            if (pastSet != null) {
-                                                set.copy(weight = pastSet.weight, reps = pastSet.reps)
-                                            } else {
-                                                set.copy(reps = set.targetReps ?: 0)
-                                            }
-                                        }
-                                        ex.copy(sets = newSets)
-                                    } else {
-                                        ex.copy(sets = ex.sets.map { s -> s.copy(reps = s.targetReps ?: 0) })
-                                    }
-                                }
-                                newW = newW.copy(loggedExercises = newExs)
-                                coroutineScope.launch {
-                                    try {
-                                        if (activeProgramState == null) {
-                                            repository.saveActiveProgramState(state.copy(
-                                                programName = program!!.programName
-                                            ))
-                                        }
-                                        repository.saveWorkout(newW)
-                                        onProgramStarted()
-                                    } catch (e: Exception) {
-                                        Log.e("ProgramsScreen", "Error starting workout", e)
-                                        Toast.makeText(context, "Failed to start workout", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth().height(52.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = TextPrimaryColor, contentColor = BgColor),
-                            shape = RoundedCornerShape(IronCorner.RadiusMd)
-                        ) {
-                            Text("START WORKOUT", style = IronTypography.Headline, color = BgColor)
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(IronSpacing.x32))
-
-                // Exercises
-                if (!day.isRestDay) {
-                    Text(
-                        "SESSION PROTOCOL",
-                        style = IronTypography.Caption.copy(color = TextTertiaryColor, letterSpacing = 2.sp),
-                        modifier = Modifier.padding(bottom = 16.dp, start = 4.dp)
-                    )
-                    
-                    day.exercises.forEach { ex ->
-                        PremiumCard(modifier = Modifier.padding(bottom = IronSpacing.x12)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    AutoResizingText(ex.name, style = IronTypography.Headline, maxLines = 1)
-                                    Text(
-                                        "${ex.muscleGroup?.uppercase() ?: "GENERAL"} • ${ex.prescription?.workingSets ?: "2"} SETS",
-                                        style = IronTypography.Micro.copy(color = TextSecondaryColor)
-                                    )
+                        PremiumCard {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                    Box(modifier = Modifier.width(3.dp).height(20.dp).background(if (isCurrentTarget) TextPrimaryColor else if (isPast) SuccessColor else TextTertiaryColor, RoundedCornerShape(2.dp)))
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    AutoResizingText(day.displayName.ifEmpty { day.trainingDay }.uppercase(), style = IronTypography.Title, maxLines = 1)
                                 }
                                 
-                                Box(modifier = Modifier.glassRecipe(RoundedCornerShape(IronCorner.RadiusSm)).padding(horizontal = 10.dp, vertical = 6.dp)) {
-                                    Text(
-                                        text = "${ex.prescription?.repRange ?: "8-12"} REPS",
-                                        style = IronTypography.Caption.copy(fontWeight = FontWeight.Black, color = TextPrimaryColor)
-                                    )
+                                if (day.isRestDay) {
+                                    Icon(Icons.Outlined.Hotel, contentDescription = null, tint = TextTertiaryColor, modifier = Modifier.size(18.dp))
                                 }
                             }
                             
-                            if (ex.technique != null && (ex.technique.failure || ex.technique.myoReps || ex.technique.lengthenedPartials || ex.technique.staticStretch)) {
-                                Row(
-                                    modifier = Modifier.padding(top = 10.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            Spacer(modifier = Modifier.height(IronSpacing.x20))
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                val statModifier = Modifier.weight(1f)
+                                StatCard(label = "TYPE", value = if (day.isRestDay) "REST" else day.trainingDay.uppercase(), modifier = statModifier)
+                                StatCard(label = "LOAD", value = if (day.isRestDay) "--" else "${day.exercises.size} EXS", modifier = statModifier)
+                                StatCard(label = "STATUS", value = if (isPast) "DONE" else if (isCurrentTarget) "READY" else "LOCKED", modifier = statModifier)
+                            }
+                            
+                            if (!day.isRestDay && isCurrentTarget) {
+                                Spacer(modifier = Modifier.height(IronSpacing.x20))
+                                Button(
+                                    onClick = {
+                                        var newW = day.toWorkout(currentWeekKey, targetDay)
+                                        val completedWorkouts = workoutsList.filter { it.status == "completed" }.sortedByDescending { it.date }
+                                        
+                                        val newExs = newW.loggedExercises.map { ex ->
+                                            val lastEx = completedWorkouts.mapNotNull { w -> w.loggedExercises.find { it.exerciseId == ex.exerciseId } }.firstOrNull()
+                                            if (lastEx != null) {
+                                                val newSets = ex.sets.map { set ->
+                                                    val pastSet = lastEx.sets.find { it.isWarmup == set.isWarmup && it.setNumber == set.setNumber }
+                                                        ?: lastEx.sets.lastOrNull { it.isWarmup == set.isWarmup }
+                                                    if (pastSet != null) {
+                                                        set.copy(weight = pastSet.weight, reps = pastSet.reps)
+                                                    } else {
+                                                        set.copy(reps = set.targetReps ?: 0)
+                                                    }
+                                                }
+                                                ex.copy(sets = newSets)
+                                            } else {
+                                                ex.copy(sets = ex.sets.map { s -> s.copy(reps = s.targetReps ?: 0) })
+                                            }
+                                        }
+                                        newW = newW.copy(loggedExercises = newExs)
+                                        coroutineScope.launch {
+                                            try {
+                                                if (activeProgramState == null) {
+                                                    repository.saveActiveProgramState(state.copy(
+                                                        programName = program!!.programName
+                                                    ))
+                                                }
+                                                repository.saveWorkout(newW)
+                                                onProgramStarted()
+                                            } catch (e: Exception) {
+                                                Log.e("ProgramsScreen", "Error starting workout", e)
+                                                Toast.makeText(context, "Failed to start workout", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = TextPrimaryColor, contentColor = BgColor),
+                                    shape = RoundedCornerShape(IronCorner.RadiusMd)
                                 ) {
-                                    if (ex.technique.failure) TechniquePill("Failure")
-                                    if (ex.technique.myoReps) TechniquePill("Myo-Reps")
-                                    if (ex.technique.lengthenedPartials) TechniquePill("LLPs")
-                                    if (ex.technique.staticStretch) TechniquePill("Static Stretch")
+                                    Text("START WORKOUT", style = IronTypography.Headline, color = BgColor)
                                 }
                             }
                         }
-                    }
-                } else {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = IronSpacing.x48),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(Icons.Outlined.Hotel, contentDescription = null, tint = TextTertiaryColor.copy(alpha = 0.2f), modifier = Modifier.size(48.dp))
-                        Spacer(modifier = Modifier.height(IronSpacing.x16))
-                        Text("RECOVERY MODE", style = IronTypography.Headline, color = TextSecondaryColor)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(day.recovery?.instructions ?: "Focus on sleep and hydration.", style = IronTypography.Footnote.copy(color = TextTertiaryColor, textAlign = TextAlign.Center))
-                        
-                        if (isCurrentTarget) {
-                            Spacer(modifier = Modifier.height(IronSpacing.x24))
-                            Button(
-                                onClick = {
-                                    coroutineScope.launch {
-                                        val nextSlot = (state.currentDaySlot) + 1
-                                        val nextWeek = if (nextSlot >= 7) (state.currentWeek) + 1 else state.currentWeek
-                                        repository.saveActiveProgramState(state.copy(
-                                            currentDaySlot = if (nextSlot >= 7) 0 else nextSlot,
-                                            currentWeek = nextWeek
-                                        ))
+
+                        Spacer(modifier = Modifier.height(IronSpacing.x32))
+
+                        // Exercises
+                        if (!day.isRestDay) {
+                            Text(
+                                "SESSION PROTOCOL",
+                                style = IronTypography.Caption.copy(color = TextTertiaryColor, letterSpacing = 2.sp),
+                                modifier = Modifier.padding(bottom = 16.dp, start = 4.dp)
+                            )
+                            
+                            day.exercises.forEach { ex ->
+                                PremiumCard(modifier = Modifier.padding(bottom = IronSpacing.x12)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            AutoResizingText(ex.name, style = IronTypography.Headline, maxLines = 1)
+                                            Text(
+                                                "${ex.muscleGroup?.uppercase() ?: "GENERAL"} • ${ex.prescription?.workingSets ?: "2"} SETS",
+                                                style = IronTypography.Micro.copy(color = TextSecondaryColor)
+                                            )
+                                        }
+                                        
+                                        Box(modifier = Modifier.glassRecipe(RoundedCornerShape(IronCorner.RadiusSm)).padding(horizontal = 10.dp, vertical = 6.dp)) {
+                                            Text(
+                                                text = "${ex.prescription?.repRange ?: "8-12"} REPS",
+                                                style = IronTypography.Caption.copy(fontWeight = FontWeight.Black, color = TextPrimaryColor)
+                                            )
+                                        }
                                     }
-                                },
-                                modifier = Modifier.fillMaxWidth().height(52.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = TextPrimaryColor, contentColor = BgColor),
-                                shape = RoundedCornerShape(IronCorner.RadiusMd)
+                                    
+                                    if (ex.technique != null && (ex.technique.failure || ex.technique.myoReps || ex.technique.lengthenedPartials || ex.technique.staticStretch)) {
+                                        Row(
+                                            modifier = Modifier.padding(top = 10.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            if (ex.technique.failure) TechniquePill("Failure")
+                                            if (ex.technique.myoReps) TechniquePill("Myo-Reps")
+                                            if (ex.technique.lengthenedPartials) TechniquePill("LLPs")
+                                            if (ex.technique.staticStretch) TechniquePill("Static Stretch")
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = IronSpacing.x48),
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Outlined.FastForward, contentDescription = null, tint = BgColor, modifier = Modifier.size(20.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("SKIP REST DAY", style = IronTypography.Headline, color = BgColor)
+                                Icon(Icons.Outlined.Hotel, contentDescription = null, tint = TextTertiaryColor.copy(alpha = 0.2f), modifier = Modifier.size(48.dp))
+                                Spacer(modifier = Modifier.height(IronSpacing.x16))
+                                Text("RECOVERY MODE", style = IronTypography.Headline, color = TextSecondaryColor)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(day.recovery?.instructions ?: "Focus on sleep and hydration.", style = IronTypography.Footnote.copy(color = TextTertiaryColor, textAlign = TextAlign.Center))
+                                
+                                if (isCurrentTarget) {
+                                    Spacer(modifier = Modifier.height(IronSpacing.x24))
+                                    Button(
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                val nextSlot = (state.currentDaySlot) + 1
+                                                val nextWeek = if (nextSlot >= 7) (state.currentWeek) + 1 else state.currentWeek
+                                                repository.saveActiveProgramState(state.copy(
+                                                    currentDaySlot = if (nextSlot >= 7) 0 else nextSlot,
+                                                    currentWeek = nextWeek
+                                                ))
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = TextPrimaryColor, contentColor = BgColor),
+                                        shape = RoundedCornerShape(IronCorner.RadiusMd)
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Outlined.FastForward, contentDescription = null, tint = BgColor, modifier = Modifier.size(20.dp))
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text("SKIP REST DAY", style = IronTypography.Headline, color = BgColor)
+                                        }
+                                    }
                                 }
                             }
                         }

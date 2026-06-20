@@ -382,13 +382,24 @@ fun ActiveWorkoutScreen(
                                     Spacer(modifier = Modifier.height(IronSpacing.x24))
                                     Button(
                                         onClick = {
-                                            if (index < workout.loggedExercises.size - 1) expandedExerciseIndex = index + 1
+                                            if (index < workout.loggedExercises.size - 1) {
+                                                expandedExerciseIndex = index + 1
+                                            } else {
+                                                coroutineScope.launch {
+                                                    repository.finishWorkout(workout)
+                                                    onFinish()
+                                                }
+                                            }
                                         },
                                         modifier = Modifier.fillMaxWidth().height(52.dp),
                                         colors = ButtonDefaults.buttonColors(containerColor = TextPrimaryColor, contentColor = BgColor),
                                         shape = RoundedCornerShape(IronCorner.RadiusSm)
                                     ) {
-                                        Text("Next →", style = IronTypography.Headline, color = BgColor)
+                                        Text(
+                                            if (index < workout.loggedExercises.size - 1) "Next →" else "FINISH WORKOUT",
+                                            style = IronTypography.Headline,
+                                            color = BgColor
+                                        )
                                     }
                                 }
                             }
