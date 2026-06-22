@@ -69,7 +69,9 @@ data class WorkoutSet(
     val targetReps: Int? = null,
     val targetRpe: String? = null,
     val notes: String? = null,
-    val restTimeSeconds: Int? = null
+    val restTimeSeconds: Int? = null,
+    val percentOfWorking: Double? = null,
+    val instruction: String? = null
 )
 
 @JsonClass(generateAdapter = true)

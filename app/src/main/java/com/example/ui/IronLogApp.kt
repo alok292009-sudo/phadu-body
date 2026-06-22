@@ -58,6 +58,9 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.ui.graphics.graphicsLayer
 import com.example.ui.theme.*
 
 @Composable
@@ -78,7 +81,25 @@ fun IronLogApp(repository: IronLogRepository) {
         NavHost(
             navController = navController,
             startDestination = startDestination,
-            modifier = Modifier
+            modifier = Modifier,
+            enterTransition = {
+                slideInVertically(
+                    initialOffsetY = { 40 /* px roughly or 40dp * density */ },
+                    animationSpec = IronAnimations.springGentle() // Since slideInVertically takes finite animation we might need to cast or use tween if spring fails... wait, spring is fine. actually initialOffsetY = { 100 }
+                ) + fadeIn(animationSpec = IronAnimations.springGentle())
+            },
+            exitTransition = {
+                fadeOut(animationSpec = tween(IronAnimations.durationMedium))
+            },
+            popEnterTransition = {
+                fadeIn(animationSpec = tween(IronAnimations.durationFast))
+            },
+            popExitTransition = {
+                slideOutVertically(
+                    targetOffsetY = { it / 8 },
+                    animationSpec = tween(IronAnimations.durationFast)
+                ) + fadeOut(animationSpec = tween(IronAnimations.durationFast))
+            }
         ) {
             composable("login") {
                 LoginScreen(
@@ -211,7 +232,20 @@ fun MainScreenWrapper(
                     
                     items.forEach { (route, icon, label) ->
                         val isSelected = currentRoute == route
-                        val contentColor = if (isSelected) TextPrimaryColor else TextPrimaryColor.copy(alpha = 0.35f)
+                        val contentColor by animateColorAsState(if (isSelected) TextPrimaryColor else TextPrimaryColor.copy(alpha = 0.35f))
+                        
+                        val iconScale by animateFloatAsState(
+                            targetValue = if (isSelected) 1.15f else 0.92f,
+                            animationSpec = IronAnimations.springBouncy()
+                        )
+                        val labelAlpha by animateFloatAsState(
+                            targetValue = if (isSelected) 1f else 0f,
+                            animationSpec = tween(durationMillis = IronAnimations.durationMedium)
+                        )
+                        val labelOffsetY by animateFloatAsState(
+                            targetValue = if (isSelected) 0f else 4f,
+                            animationSpec = IronAnimations.springGentle()
+                        )
                         
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -234,15 +268,26 @@ fun MainScreenWrapper(
                                 imageVector = icon,
                                 contentDescription = label,
                                 tint = contentColor,
-                                modifier = Modifier.size(22.dp)
+                                modifier = Modifier
+                                    .size(22.dp)
+                                    .graphicsLayer {
+                                        scaleX = iconScale
+                                        scaleY = iconScale
+                                    }
                             )
-                            Spacer(modifier = Modifier.height(IronSpacing.x4))
-                            Text(
-                                text = label,
-                                style = IronTypography.Micro.copy(color = contentColor),
-                                maxLines = 1,
-                                softWrap = false
-                            )
+                            if (labelAlpha > 0.01f) {
+                                Spacer(modifier = Modifier.height(IronSpacing.x4))
+                                Text(
+                                    text = label,
+                                    style = IronTypography.Micro.copy(color = contentColor),
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    modifier = Modifier.graphicsLayer {
+                                        alpha = labelAlpha
+                                        translationY = labelOffsetY * density
+                                    }
+                                )
+                            }
                         }
                     }
                 }

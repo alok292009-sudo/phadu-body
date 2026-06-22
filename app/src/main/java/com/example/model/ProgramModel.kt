@@ -222,7 +222,8 @@ fun ProgramDay.toWorkout(weekKey: String, dayIndex: Int): Workout {
                     targetReps = targetRepsVal,
                     reps = targetRepsVal,
                     targetRpe = "Warmup",
-                    notes = "Load: ${rampSet.percentOfWorking}% - ${rampSet.instruction}"
+                    percentOfWorking = rampSet.percentOfWorking?.toDouble(),
+                    instruction = rampSet.instruction
                 ))
             }
         } else if (warmupCount > 0) {

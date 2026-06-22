@@ -864,7 +864,6 @@ class FirebaseIronLogRepository(private val context: Context) : IronLogRepositor
             }
         } catch (e: Exception) {
             Log.e("FirebaseRepo", "Error saving program state to Firestore", e)
-            throw e // Re-throw to be caught by UI if desired
         }
     }
 

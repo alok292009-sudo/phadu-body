@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.util.Log
 import com.example.data.IronLogRepository
 import com.example.model.UserProfile
 import com.example.model.Workout
@@ -79,6 +80,51 @@ fun ProfileScreen(
 
             Spacer(modifier = Modifier.height(IronSpacing.x48))
 
+            var showWeightPicker by remember { mutableStateOf(false) }
+
+            Text("MEASUREMENTS", style = IronTypography.Micro.copy(color = TextTertiaryColor, letterSpacing = 1.5.sp))
+            Spacer(modifier = Modifier.height(IronSpacing.x12))
+            
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .glassRecipe(RoundedCornerShape(IronCorner.RadiusLg))
+                    .padding(IronSpacing.x16)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Bodyweight", style = IronTypography.Body.copy(color = Color.White))
+                    com.example.ui.components.StepperChip(
+                        value = profile.weightKg.takeIf { it > 0 } ?: 70.0,
+                        unit = "KG",
+                        onValueChange = { newVal ->
+                            val updatedProfile = profile.copy(weightKg = newVal)
+                            coroutineScope.launch { repository.saveUserProfile(updatedProfile) }
+                        },
+                        onClick = { showWeightPicker = true },
+                        modifier = Modifier.width(120.dp)
+                    )
+                }
+            }
+
+            if (showWeightPicker) {
+                com.example.ui.components.ScrollPickerSheet(
+                    initialValue = profile.weightKg.takeIf { it > 0 } ?: 70.0,
+                    type = "WEIGHT",
+                    onDismiss = { showWeightPicker = false },
+                    onDone = { newVal ->
+                        val updatedProfile = profile.copy(weightKg = newVal)
+                        coroutineScope.launch { repository.saveUserProfile(updatedProfile) }
+                        showWeightPicker = false
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(IronSpacing.x48))
+
             // Actions list
             Text("UTILITIES", style = IronTypography.Micro.copy(color = TextTertiaryColor, letterSpacing = 1.5.sp))
             Spacer(modifier = Modifier.height(IronSpacing.x12))
@@ -108,8 +154,13 @@ fun ProfileScreen(
                         .fillMaxWidth()
                         .bouncyClick { 
                             coroutineScope.launch {
-                                repository.saveActiveProgramState(null)
-                                Toast.makeText(context, "Program state reset", Toast.LENGTH_SHORT).show()
+                                try {
+                                    repository.saveActiveProgramState(null)
+                                    Toast.makeText(context, "Program state reset", Toast.LENGTH_SHORT).show()
+                                } catch (e: Exception) {
+                                    Log.e("Profile", "Error resetting program", e)
+                                    Toast.makeText(context, "Failed to reset: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
                             }
                         }
                         .padding(IronSpacing.x20),

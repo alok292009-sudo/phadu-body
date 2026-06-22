@@ -425,21 +425,18 @@ fun ProgramsScreen(repository: IronLogRepository, onProgramStarted: () -> Unit) 
                                     Button(
                                         onClick = {
                                             coroutineScope.launch {
-                                                var nextSlot = (state.currentDaySlot + 1) % 7
-                                                // Find next non-rest day
-                                                for (i in 1..7) {
-                                                    val checkSlot = (state.currentDaySlot + i) % 7
-                                                    val checkDay = daysList.getOrNull(checkSlot)
-                                                    if (checkDay != null && !checkDay.isRestDay) {
-                                                        nextSlot = checkSlot
-                                                        break
-                                                    }
+                                                val totalDays = daysList.size.takeIf { it > 0 } ?: 7
+                                                val nextSlot = state.currentDaySlot + 1
+                                                val nextWeek = if (nextSlot >= totalDays) state.currentWeek + 1 else state.currentWeek
+                                                val finalSlot = nextSlot % totalDays
+                                                try {
+                                                    repository.saveActiveProgramState(state.copy(
+                                                        currentDaySlot = finalSlot,
+                                                        currentWeek = nextWeek
+                                                    ))
+                                                } catch (e: Exception) {
+                                                    Log.e("ProgramsScreen", "Error saving active program state", e)
                                                 }
-                                                val nextWeek = if (nextSlot <= state.currentDaySlot) state.currentWeek + 1 else state.currentWeek
-                                                repository.saveActiveProgramState(state.copy(
-                                                    currentDaySlot = nextSlot,
-                                                    currentWeek = nextWeek
-                                                ))
                                             }
                                         },
                                         modifier = Modifier.fillMaxWidth().height(52.dp),

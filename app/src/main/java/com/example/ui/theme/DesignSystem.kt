@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.*
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
@@ -192,13 +193,30 @@ fun AutoResizingText(
 fun Modifier.bouncy(enabled: Boolean = true): Modifier = composed {
     var isPressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.96f else 1f,
-        animationSpec = tween(durationMillis = if (isPressed) 120 else 80, easing = CubicBezierEasing(0.34f, 1.56f, 0.64f, 1f)),
+        targetValue = if (isPressed) 0.94f else 1f,
+        animationSpec = if (isPressed) {
+            tween(durationMillis = 80, easing = CubicBezierEasing(0.16f, 1f, 0.3f, 1f))
+        } else {
+            spring(dampingRatio = 0.71f, stiffness = 280f)
+        },
         label = "bounce_scale"
+    )
+    val alpha by animateFloatAsState(
+        targetValue = if (isPressed) 0.85f else 1f,
+        animationSpec = if (isPressed) {
+            tween(durationMillis = 80, easing = CubicBezierEasing(0.16f, 1f, 0.3f, 1f))
+        } else {
+            spring(dampingRatio = 0.71f, stiffness = 280f)
+        },
+        label = "bounce_alpha"
     )
 
     this
-        .scale(scale)
+        .graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+            this.alpha = alpha
+        }
         .pointerInput(enabled) {
             if (enabled) {
                 while (true) {

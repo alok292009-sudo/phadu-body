@@ -29,6 +29,7 @@ import com.example.model.LoggedExercise
 import com.example.model.Workout
 import com.example.model.WorkoutSet
 import com.example.ui.theme.*
+import com.example.ui.components.*
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -219,32 +220,38 @@ fun ActiveWorkoutScreen(
                     val isActive = index == expandedExerciseIndex
                     val isCompleted = ex.sets.isNotEmpty() && ex.sets.all { it.completedAt != null }
                     
-                    if (isCompleted && !isActive) {
-                        // Collapsed row
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = IronSpacing.x16, vertical = IronSpacing.x8)
-                                .glassRecipe(RoundedCornerShape(IronCorner.RadiusLg))
-                                .bouncyClick { expandedExerciseIndex = index }
-                                .padding(IronSpacing.x16),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            AutoResizingText(ex.exerciseName, style = IronTypography.Body, maxLines = 1, modifier = Modifier.weight(1f))
-                            Text("✓ ${ex.sets.size} sets", style = IronTypography.Footnote.copy(color = TextSecondaryColor))
-                        }
-                    } else {
-                        // Full card
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = IronSpacing.x16, vertical = IronSpacing.x8)
-                                .alpha(if (isActive) 1f else 0.5f)
-                                .glassRecipe(RoundedCornerShape(IronCorner.RadiusLg))
-                                .bouncyClick { expandedExerciseIndex = index }
-                                .padding(IronSpacing.x20)
-                        ) {
+                    Box(
+                        modifier = Modifier
+                            .staggeredEntry(index = index, baseDelayMs = 40, translationYOffsetDp = 16f, springSpec = IronAnimations.springStandard())
+                            .fillMaxWidth()
+                            .animateContentSize(animationSpec = IronAnimations.springGentle())
+                    ) {
+                        if (isCompleted && !isActive) {
+                            // Collapsed row
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = IronSpacing.x16, vertical = IronSpacing.x8)
+                                    .glassRecipe(RoundedCornerShape(IronCorner.RadiusLg))
+                                    .bouncyClick { expandedExerciseIndex = index }
+                                    .padding(IronSpacing.x16),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                AutoResizingText(ex.exerciseName, style = IronTypography.Body, maxLines = 1, modifier = Modifier.weight(1f))
+                                Text("✓ ${ex.sets.size} sets", style = IronTypography.Footnote.copy(color = TextSecondaryColor))
+                            }
+                        } else {
+                            // Full card
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = IronSpacing.x16, vertical = IronSpacing.x8)
+                                    .alpha(if (isActive) 1f else 0.5f)
+                                    .glassRecipe(RoundedCornerShape(IronCorner.RadiusLg))
+                                    .bouncyClick { expandedExerciseIndex = index }
+                                    .padding(IronSpacing.x20)
+                            ) {
                             Column {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -310,27 +317,37 @@ fun ActiveWorkoutScreen(
                                     Text("Note: $it", style = IronTypography.Footnote.copy(color = TextSecondaryColor))
                                 }
 
-                                Spacer(modifier = Modifier.height(IronSpacing.x24))
-                                Text("LOG WORKING SETS", style = IronTypography.Caption.copy(color = TextTertiaryColor))
-                                Spacer(modifier = Modifier.height(IronSpacing.x16))
-                                
-                                ex.sets.forEachIndexed { setIdx, set ->
-                                    val isSetCompleted = set.completedAt != null
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().padding(bottom = IronSpacing.x16),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Text(
-                                            text = "${setIdx + 1}", 
-                                            style = IronTypography.Subheading.copy(fontWeight = FontWeight.Black), 
-                                            modifier = Modifier.width(24.dp)
-                                        )
-                                        
-                                        StepperChip(
-                                            value = set.weight,
-                                            unit = "KG",
-                                            onValueChange = { newVal ->
+                                val warmupSets = ex.sets.mapIndexed { idx, set -> Pair(idx, set) }.filter { it.second.isWarmup }
+                                val workingSets = ex.sets.mapIndexed { idx, set -> Pair(idx, set) }.filter { !it.second.isWarmup }
+
+                                if (warmupSets.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(IronSpacing.x24))
+                                    Text("WARM-UP", style = IronTypography.Caption.copy(color = TextTertiaryColor))
+                                    Spacer(modifier = Modifier.height(IronSpacing.x16))
+                                    
+                                    val firstWorkingWeight = workingSets.map { it.second.weight }.firstOrNull { it > 0.0 } ?: 0.0
+                                    
+                                    warmupSets.forEach { (setIdx, set) ->
+                                        val isSetCompleted = set.completedAt != null
+                                        val autoWeight = if (set.percentOfWorking != null && firstWorkingWeight > 0.0) {
+                                            Math.round((firstWorkingWeight * set.percentOfWorking / 100.0) / 2.5) * 2.5
+                                        } else 0.0
+                                        val hasManualOverride = set.weight > 0.0
+                                        val effectiveWeight = if (hasManualOverride) set.weight else autoWeight
+                                        val displayWeightStr = if (effectiveWeight > 0.0) if (effectiveWeight % 1.0 == 0.0) effectiveWeight.toInt().toString() else effectiveWeight.toString() else "—"
+
+                                        SetRow(
+                                            set = set,
+                                            setIdx = setIdx,
+                                            isWarmup = true,
+                                            effectiveWeight = effectiveWeight,
+                                            displayWeightStr = displayWeightStr,
+                                            onWeightClick = {
+                                                val initVal = if (effectiveWeight > 0) effectiveWeight else (set.targetWeight ?: 20.0)
+                                                editingSetInfo = EditingSetInfo(index, setIdx, initVal, "WEIGHT", "KG", 2.5)
+                                                showStepperSheet = true
+                                            },
+                                            onWeightChange = { newVal ->
                                                 val updatedSets = ex.sets.toMutableList()
                                                 updatedSets[setIdx] = set.copy(weight = newVal)
                                                 val updatedEx = ex.copy(sets = updatedSets)
@@ -338,17 +355,12 @@ fun ActiveWorkoutScreen(
                                                 updatedList[index] = updatedEx
                                                 coroutineScope.launch { repository.saveWorkout(workout.copy(loggedExercises = updatedList)) }
                                             },
-                                            onClick = {
-                                                editingSetInfo = EditingSetInfo(index, setIdx, set.weight, "WEIGHT", "KG", 2.5)
+                                            onRepsClick = {
+                                                val initVal = if (set.reps > 0) set.reps.toDouble() else (set.targetReps?.toDouble() ?: 8.0)
+                                                editingSetInfo = EditingSetInfo(index, setIdx, initVal, "REPS", "REPS", 1.0)
                                                 showStepperSheet = true
                                             },
-                                            modifier = Modifier.weight(1.3f)
-                                        )
-
-                                        StepperChip(
-                                            value = set.reps.toDouble(),
-                                            unit = "REPS",
-                                            onValueChange = { newVal ->
+                                            onRepsChange = { newVal ->
                                                 val updatedSets = ex.sets.toMutableList()
                                                 updatedSets[setIdx] = set.copy(reps = newVal.toInt())
                                                 val updatedEx = ex.copy(sets = updatedSets)
@@ -356,47 +368,85 @@ fun ActiveWorkoutScreen(
                                                 updatedList[index] = updatedEx
                                                 coroutineScope.launch { repository.saveWorkout(workout.copy(loggedExercises = updatedList)) }
                                             },
-                                            onClick = {
-                                                editingSetInfo = EditingSetInfo(index, setIdx, set.reps.toDouble(), "REPS", "REPS", 1.0)
+                                            onDoneToggle = {
+                                                val nowDone = set.completedAt == null
+                                                val updatedSets = ex.sets.toMutableList()
+                                                updatedSets[setIdx] = set.copy(completedAt = if (nowDone) System.currentTimeMillis() else null)
+                                                
+                                                val updatedEx = ex.copy(sets = updatedSets)
+                                                val updatedList = workout.loggedExercises.toMutableList()
+                                                updatedList[index] = updatedEx
+                                                coroutineScope.launch { repository.saveWorkout(workout.copy(loggedExercises = updatedList)) }
+                                            }
+                                        )
+                                    }
+                                    
+                                    HorizontalDivider(thickness = 0.5.dp, color = Color.White.copy(alpha = 0.1f), modifier = Modifier.padding(vertical = IronSpacing.x16))
+                                }
+
+                                if (workingSets.isNotEmpty()) {
+                                    if (warmupSets.isEmpty()) {
+                                        Spacer(modifier = Modifier.height(IronSpacing.x24))
+                                    }
+                                    Text("WORKING SETS", style = IronTypography.Caption.copy(color = TextTertiaryColor))
+                                    Spacer(modifier = Modifier.height(IronSpacing.x16))
+                                                               workingSets.forEach { (setIdx, set) ->
+                                        val displayWeightStr = null
+                                        val effectiveWeight = set.weight
+                                        
+                                        SetRow(
+                                            set = set,
+                                            setIdx = setIdx,
+                                            isWarmup = false,
+                                            effectiveWeight = effectiveWeight,
+                                            displayWeightStr = displayWeightStr,
+                                            onWeightClick = {
+                                                val initVal = if (set.weight > 0) set.weight else (set.targetWeight ?: 20.0)
+                                                editingSetInfo = EditingSetInfo(index, setIdx, initVal, "WEIGHT", "KG", 2.5)
                                                 showStepperSheet = true
                                             },
-                                            modifier = Modifier.weight(1.2f),
-                                            step = 1.0
+                                            onWeightChange = { newVal ->
+                                                val updatedSets = ex.sets.toMutableList()
+                                                updatedSets[setIdx] = set.copy(weight = newVal)
+                                                val updatedEx = ex.copy(sets = updatedSets)
+                                                val updatedList = workout.loggedExercises.toMutableList()
+                                                updatedList[index] = updatedEx
+                                                coroutineScope.launch { repository.saveWorkout(workout.copy(loggedExercises = updatedList)) }
+                                            },
+                                            onRepsClick = {
+                                                val initVal = if (set.reps > 0) set.reps.toDouble() else (set.targetReps?.toDouble() ?: 8.0)
+                                                editingSetInfo = EditingSetInfo(index, setIdx, initVal, "REPS", "REPS", 1.0)
+                                                showStepperSheet = true
+                                            },
+                                            onRepsChange = { newVal ->
+                                                val updatedSets = ex.sets.toMutableList()
+                                                updatedSets[setIdx] = set.copy(reps = newVal.toInt())
+                                                val updatedEx = ex.copy(sets = updatedSets)
+                                                val updatedList = workout.loggedExercises.toMutableList()
+                                                updatedList[index] = updatedEx
+                                                coroutineScope.launch { repository.saveWorkout(workout.copy(loggedExercises = updatedList)) }
+                                            },
+                                            onDoneToggle = {
+                                                val nowDone = set.completedAt == null
+                                                val updatedSets = ex.sets.toMutableList()
+                                                updatedSets[setIdx] = set.copy(completedAt = if (nowDone) System.currentTimeMillis() else null)
+                                                
+                                                if (nowDone && set.rpe == null) {
+                                                    updatedSets[setIdx] = updatedSets[setIdx].copy(rpe = 8.0f)
+                                                }
+                                                
+                                                val updatedEx = ex.copy(sets = updatedSets)
+                                                val updatedList = workout.loggedExercises.toMutableList()
+                                                updatedList[index] = updatedEx
+                                                coroutineScope.launch { repository.saveWorkout(workout.copy(loggedExercises = updatedList)) }
+                                                
+                                                if (nowDone) {
+                                                    val restSecs = set.restTimeSeconds ?: 90
+                                                    activeRestTimerDuration = restSecs
+                                                    activeRestTimerEnd = System.currentTimeMillis() + (restSecs * 1000L)
+                                                }
+                                            }
                                         )
-
-                                        Box(
-                                            modifier = Modifier
-                                                .size(44.dp)
-                                                .background(if (isSetCompleted) TextPrimaryColor else Color.White.copy(alpha = 0.05f), RoundedCornerShape(IronCorner.RadiusMd))
-                                                .border(
-                                                    1.dp,
-                                                    if (isSetCompleted) Color.Transparent else Color.White.copy(alpha = 0.25f),
-                                                    RoundedCornerShape(IronCorner.RadiusMd)
-                                                )
-                                                .bouncyClick {
-                                                    val nowDone = !isSetCompleted
-                                                    val updatedSets = ex.sets.toMutableList()
-                                                    updatedSets[setIdx] = set.copy(completedAt = if (nowDone) System.currentTimeMillis() else null)
-                                                    
-                                                    if (nowDone && set.rpe == null) {
-                                                        updatedSets[setIdx] = updatedSets[setIdx].copy(rpe = 8.0f)
-                                                    }
-                                                    
-                                                    val updatedEx = ex.copy(sets = updatedSets)
-                                                    val updatedList = workout.loggedExercises.toMutableList()
-                                                    updatedList[index] = updatedEx
-                                                    coroutineScope.launch { repository.saveWorkout(workout.copy(loggedExercises = updatedList)) }
-                                                    
-                                                    if (nowDone) {
-                                                        val restSecs = set.restTimeSeconds ?: 90
-                                                        activeRestTimerDuration = restSecs
-                                                        activeRestTimerEnd = System.currentTimeMillis() + (restSecs * 1000L)
-                                                    }
-                                                },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(Icons.Outlined.Check, contentDescription = "Done", tint = if (isSetCompleted) BgColor else TextPrimaryColor, modifier = Modifier.size(20.dp))
-                                        }
                                     }
                                 }
                                 
@@ -429,9 +479,10 @@ fun ActiveWorkoutScreen(
                         }
                     }
                 }
-            }
+            } // Close itemsIndexed
+        } // Close LazyColumn
 
-            // Rest Timer
+        // Rest Timer
             if (activeRestTimerEnd != null) {
                 Box(
                     modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(IronSpacing.x16)
@@ -575,92 +626,38 @@ fun ActiveWorkoutScreen(
 
     if (showStepperSheet && editingSetInfo != null) {
         val info = editingSetInfo!!
-        ModalBottomSheet(
-            onDismissRequest = { showStepperSheet = false },
-            sheetState = sheetState,
-            containerColor = Color(0xFF1C1C1E),
-            dragHandle = { BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha = 0.2f)) }
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(IronSpacing.x24)
-                    .padding(bottom = 48.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "ADJUST ${info.type}",
-                    style = IronTypography.Caption.copy(color = TextTertiaryColor, letterSpacing = 2.sp)
-                )
-                Spacer(modifier = Modifier.height(IronSpacing.x32))
+        com.example.ui.components.ScrollPickerSheet(
+            initialValue = info.currentValue,
+            type = info.type,
+            onDismiss = { showStepperSheet = false },
+            onDone = { newVal ->
+                val ex = workout.loggedExercises[info.exerciseIndex]
+                val updatedSets = ex.sets.toMutableList()
+                val set = updatedSets[info.setIdx]
+                val isFirstWorkingSet = !set.isWarmup && info.setIdx == ex.sets.indexOfFirst { !it.isWarmup }
                 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy( IronSpacing.x32 )
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(64.dp)
-                            .glassRecipe(RoundedCornerShape(IronCorner.RadiusMd))
-                            .bouncyClick {
-                                val newVal = maxOf(0.0, info.currentValue - info.step)
-                                editingSetInfo = info.copy(currentValue = newVal)
-                                // Apply to workout state
-                                val ex = workout.loggedExercises[info.exerciseIndex]
-                                val updatedSets = ex.sets.toMutableList()
-                                val set = updatedSets[info.setIdx]
-                                updatedSets[info.setIdx] = if (info.type == "WEIGHT") set.copy(weight = newVal) else set.copy(reps = newVal.toInt())
-                                val updatedEx = ex.copy(sets = updatedSets)
-                                val updatedList = workout.loggedExercises.toMutableList()
-                                updatedList[info.exerciseIndex] = updatedEx
-                                coroutineScope.launch { repository.saveWorkout(workout.copy(loggedExercises = updatedList)) }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("-", style = IronTypography.Heading)
+                if (info.type == "WEIGHT") {
+                    updatedSets[info.setIdx] = set.copy(weight = newVal)
+                    if (isFirstWorkingSet) {
+                        for (i in updatedSets.indices) {
+                            val currSet = updatedSets[i]
+                            if (currSet.isWarmup && currSet.percentOfWorking != null) {
+                                val calculated = Math.round((newVal * currSet.percentOfWorking) / 2.5) * 2.5
+                                updatedSets[i] = currSet.copy(weight = calculated)
+                            }
+                        }
                     }
-                    
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        val displayVal = if (info.currentValue % 1.0 == 0.0) "${info.currentValue.toInt()}" else String.format("%.1f", info.currentValue)
-                        Text(displayVal, style = IronTypography.Display)
-                        Text(info.unit, style = IronTypography.Headline.copy(color = TextSecondaryColor))
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .size(64.dp)
-                            .glassRecipe(RoundedCornerShape(IronCorner.RadiusMd))
-                            .bouncyClick {
-                                val newVal = info.currentValue + info.step
-                                editingSetInfo = info.copy(currentValue = newVal)
-                                // Apply to workout state
-                                val ex = workout.loggedExercises[info.exerciseIndex]
-                                val updatedSets = ex.sets.toMutableList()
-                                val set = updatedSets[info.setIdx]
-                                updatedSets[info.setIdx] = if (info.type == "WEIGHT") set.copy(weight = newVal) else set.copy(reps = newVal.toInt())
-                                val updatedEx = ex.copy(sets = updatedSets)
-                                val updatedList = workout.loggedExercises.toMutableList()
-                                updatedList[info.exerciseIndex] = updatedEx
-                                coroutineScope.launch { repository.saveWorkout(workout.copy(loggedExercises = updatedList)) }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("+", style = IronTypography.Heading)
-                    }
+                } else {
+                    updatedSets[info.setIdx] = set.copy(reps = newVal.toInt())
                 }
                 
-                Spacer(modifier = Modifier.height( IronSpacing.x48 ))
-                
-                Button(
-                    onClick = { showStepperSheet = false },
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = TextPrimaryColor, contentColor = BgColor),
-                    shape = RoundedCornerShape(IronCorner.RadiusSm)
-                ) {
-                    Text("DONE", style = IronTypography.Headline)
-                }
+                val updatedEx = ex.copy(sets = updatedSets)
+                val updatedList = workout.loggedExercises.toMutableList()
+                updatedList[info.exerciseIndex] = updatedEx
+                coroutineScope.launch { repository.saveWorkout(workout.copy(loggedExercises = updatedList)) }
+                showStepperSheet = false
             }
-        }
+        )
     }
 
     val workoutResult = remember(showSummaryDialog) { 
@@ -776,62 +773,4 @@ fun TechniquePillMini(label: String) {
         )
     }
 }
-@Composable
-fun StepperChip(
-    value: Double,
-    unit: String,
-    onValueChange: (Double) -> Unit,
-    onClick: () -> Unit = {},
-    modifier: Modifier = Modifier,
-    step: Double = 2.5
-) {
-    Row(
-        modifier = modifier
-            .height(44.dp)
-            .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(IronCorner.RadiusMd))
-            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(IronCorner.RadiusMd)),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .width(32.dp)
-                .fillMaxHeight()
-                .clip(RoundedCornerShape(topStart = IronCorner.RadiusMd, bottomStart = IronCorner.RadiusMd))
-                .clickable { onValueChange(maxOf(0.0, value - step)) },
-            contentAlignment = Alignment.Center
-        ) {
-            Text("-", style = IronTypography.Headline, color = TextPrimaryColor)
-        }
-        
-        Box(
-            modifier = Modifier.weight(1f).fillMaxHeight().clickable { onClick() },
-            contentAlignment = Alignment.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                val displayVal = if (value % 1.0 == 0.0) "${value.toInt()}" else String.format("%.1f", value)
-                Text(
-                    text = displayVal,
-                    style = IronTypography.Headline,
-                    fontSize = 13.sp
-                )
-                Text(
-                    text = unit,
-                    style = IronTypography.Caption.copy(fontSize = 7.sp, color = TextSecondaryColor, fontWeight = FontWeight.Bold),
-                    maxLines = 1,
-                    softWrap = false
-                )
-            }
-        }
-        
-        Box(
-            modifier = Modifier
-                .width(32.dp)
-                .fillMaxHeight()
-                .clip(RoundedCornerShape(topEnd = IronCorner.RadiusMd, bottomEnd = IronCorner.RadiusMd))
-                .clickable { onValueChange(value + step) },
-            contentAlignment = Alignment.Center
-        ) {
-            Text("+", style = IronTypography.Headline, color = TextPrimaryColor)
-        }
-    }
-}
+

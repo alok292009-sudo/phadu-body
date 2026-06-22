@@ -71,6 +71,57 @@ fun PlateCalculatorScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(IronSpacing.x16)
         ) {
+            var showTargetWeightPicker by remember { mutableStateOf(false) }
+            
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .glassRecipe(RoundedCornerShape(IronCorner.RadiusLg))
+                    .padding(IronSpacing.x16),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Target Weight", style = IronTypography.Body.copy(color = Color.White))
+                com.example.ui.components.StepperChip(
+                    value = totalWeight,
+                    unit = "KG",
+                    onValueChange = { newVal ->
+                        // Calculate plates for newVal
+                        selectedPlates.clear()
+                        var remaining = (newVal - barbellWeight) / 2.0
+                        for ((plateWeight, _) in availablePlates) {
+                            while (remaining >= plateWeight) {
+                                selectedPlates.add(plateWeight)
+                                remaining -= plateWeight
+                            }
+                        }
+                    },
+                    onClick = { showTargetWeightPicker = true },
+                    modifier = Modifier.width(120.dp)
+                )
+            }
+            
+            if (showTargetWeightPicker) {
+                com.example.ui.components.ScrollPickerSheet(
+                    initialValue = totalWeight,
+                    type = "WEIGHT",
+                    onDismiss = { showTargetWeightPicker = false },
+                    onDone = { newVal ->
+                        selectedPlates.clear()
+                        var remaining = (newVal - barbellWeight) / 2.0
+                        for ((plateWeight, _) in availablePlates) {
+                            while (remaining >= plateWeight) {
+                                selectedPlates.add(plateWeight)
+                                remaining -= plateWeight
+                            }
+                        }
+                        showTargetWeightPicker = false
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(IronSpacing.x16))
+
             // Total Weight Display (Most prominent)
             Box(
                 modifier = Modifier

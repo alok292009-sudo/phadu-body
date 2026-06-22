@@ -163,6 +163,20 @@ fun HomeScreen(
         Box(modifier = Modifier.fillMaxSize()) {
             val p = program
             if (p != null) {
+                // STRICT VALIDATION: Compare weeks in JSON vs Database vs UI
+                val actualWeeks = p.weeks.size
+                val expectedWeeks = p._meta?.schema?.totalWeeks ?: p.program?.durationWeeks ?: 12
+                if (actualWeeks < expectedWeeks || actualWeeks < 12) {
+                    Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Icon(Icons.Outlined.Warning, contentDescription = "Error", tint = DestructiveColor, modifier = Modifier.size(64.dp))
+                            Text("Program Import Error: Weeks Missing", style = IronTypography.Title, color = DestructiveColor, textAlign = TextAlign.Center)
+                            Text("The application failed to load all 12 weeks from the JSON. Only $actualWeeks weeks were loaded.", style = IronTypography.Body, color = TextSecondaryColor, textAlign = TextAlign.Center)
+                        }
+                    }
+                    return@Scaffold
+                }
+
                 if (isInitialLoadComplete && activeProgramState == null) {
                     OnboardingView(p, repository, onProfileClick)
                 } else {
@@ -623,6 +637,7 @@ fun DashboardClean(
         // Top row (Health Header)
         Row(
             modifier = Modifier
+                .staggeredEntry(0)
                 .fillMaxWidth()
                 .statusBarsPadding()
                 .padding(bottom = IronSpacing.x16)
@@ -647,17 +662,80 @@ fun DashboardClean(
 
         // Action Recommendation
         selectedDay?.let { day ->
-            val isActuallyToday = todayTargetDayIndex == todayWeekday
+            Column(modifier = Modifier.staggeredEntry(1)) {
+                val isActuallyToday = todayTargetDayIndex == todayWeekday
+                Text(
+                    if (day.isRestDay) "TODAY IS FOR RECOVERY" else "RECOMMENDED ACTION",
+                    style = IronTypography.Caption.copy(color = SuccessColor, fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                    modifier = Modifier.padding(bottom = IronSpacing.x12, start = 4.dp)
+                )
+                Text(
+                    if (day.isRestDay) "Focus on mobility and restoration." else "Ready for ${day.trainingDay.uppercase()}?",
+                    style = IronTypography.Body.copy(color = TextSecondaryColor, fontSize = 12.sp),
+                    modifier = Modifier.padding(bottom = IronSpacing.x20, start = 4.dp)
+                )
+            }
+        }
+
+        // PROGRAM DASHBOARD
+        Column(
+            modifier = Modifier.staggeredEntry(2, springSpec = IronAnimations.springBouncy()).fillMaxWidth().padding(bottom = IronSpacing.x24),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
             Text(
-                if (day.isRestDay) "TODAY IS FOR RECOVERY" else "RECOMMENDED ACTION",
-                style = IronTypography.Caption.copy(color = SuccessColor, fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
-                modifier = Modifier.padding(bottom = IronSpacing.x12, start = 4.dp)
+                "PROGRAM DASHBOARD",
+                style = IronTypography.Caption.copy(color = TextTertiaryColor, letterSpacing = 2.sp, fontWeight = FontWeight.Bold),
+                modifier = Modifier.padding(start = 4.dp)
             )
-            Text(
-                if (day.isRestDay) "Focus on mobility and restoration." else "Ready for ${day.trainingDay.uppercase()}?",
-                style = IronTypography.Body.copy(color = TextSecondaryColor, fontSize = 12.sp),
-                modifier = Modifier.padding(bottom = IronSpacing.x20, start = 4.dp)
-            )
+            
+            PremiumCard {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text(
+                        "${program.durationWeeks} Week Transformation Program",
+                        style = IronTypography.Body.copy(color = TextPrimaryColor, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                    )
+                    
+                    val cw = activeProgramState?.currentWeek ?: 1
+                    val duration = program.durationWeeks.coerceAtLeast(1)
+                    val wCompleted = cw - 1
+                    val wRem = (duration - cw).coerceAtLeast(0)
+                    val completionPct = ((wCompleted.toFloat() / duration.toFloat()) * 100).toInt()
+                    val cDayNum = (activeProgramState?.currentDaySlot ?: 0) + 1
+                    
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Column {
+                            Text("Current Week", style = IronTypography.Caption.copy(color = TextTertiaryColor))
+                            Text("Week $cw", style = IronTypography.Body.copy(color = SuccessColor, fontWeight = FontWeight.Black))
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("Current Day", style = IronTypography.Caption.copy(color = TextTertiaryColor))
+                            Text("Day $cDayNum", style = IronTypography.Body.copy(color = TextPrimaryColor, fontWeight = FontWeight.Black))
+                        }
+                    }
+                    
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Column {
+                            Text("Weeks Completed", style = IronTypography.Caption.copy(color = TextTertiaryColor))
+                            Text("$wCompleted", style = IronTypography.Body.copy(color = TextPrimaryColor, fontWeight = FontWeight.Black))
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("Weeks Remaining", style = IronTypography.Caption.copy(color = TextTertiaryColor))
+                            Text("$wRem", style = IronTypography.Body.copy(color = TextPrimaryColor, fontWeight = FontWeight.Black))
+                        }
+                    }
+                    
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Program Completion", style = IronTypography.Caption.copy(color = TextTertiaryColor))
+                            Text("$completionPct%", style = IronTypography.Caption.copy(color = SuccessColor, fontWeight = FontWeight.Bold))
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Box(modifier = Modifier.fillMaxWidth().height(6.dp).background(Color.White.copy(0.05f), RoundedCornerShape(100))) {
+                            Box(modifier = Modifier.fillMaxWidth(completionPct / 100f).fillMaxHeight().background(SuccessColor, RoundedCornerShape(100)))
+                        }
+                    }
+                }
+            }
         }
 
         // Stats row (Moved Up)
@@ -774,20 +852,15 @@ fun DashboardClean(
                             Button(
                                 onClick = {
                                     coroutineScope.launch {
-                                        var nextSlot = (todayTargetDayIndex + 1) % 7
-                                        var foundNext = false
-                                        // Look ahead for next 7 days for a non-rest day
-                                        for (i in 1..7) {
-                                            val checkSlot = (todayTargetDayIndex + i) % 7
-                                            val checkDay = daysList.getOrNull(checkSlot)
-                                            if (checkDay != null && !checkDay.isRestDay) {
-                                                nextSlot = checkSlot
-                                                foundNext = true
-                                                break
-                                            }
+                                        val totalDays = daysList.size.takeIf { it > 0 } ?: 7
+                                        val nextSlot = todayTargetDayIndex + 1
+                                        val nextWeek = if (nextSlot >= totalDays) targetWeek + 1 else targetWeek
+                                        val finalSlot = nextSlot % totalDays
+                                        try {
+                                            repository.saveActiveProgramState(activeProgramState?.copy(currentDaySlot = finalSlot, currentWeek = nextWeek))
+                                        } catch (e: Exception) {
+                                            Log.e("HomeScreen", "Error saving active program state", e)
                                         }
-                                        val nextWeek = if (nextSlot <= todayTargetDayIndex) targetWeek + 1 else targetWeek
-                                        repository.saveActiveProgramState(activeProgramState?.copy(currentDaySlot = nextSlot, currentWeek = nextWeek))
                                     }
                                 },
                                 modifier = Modifier.fillMaxWidth().height(56.dp),
@@ -825,7 +898,7 @@ fun DashboardClean(
             }
         }
 
-        Row(modifier = Modifier.fillMaxWidth().padding(bottom = IronSpacing.x32), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(modifier = Modifier.staggeredEntry(3).fillMaxWidth().padding(bottom = IronSpacing.x32), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Box(modifier = Modifier.weight(1f).height(48.dp).glassRecipe(RoundedCornerShape(IronCorner.RadiusMd)).bouncyClick { showWarmupDialog = true }, contentAlignment = Alignment.Center) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Outlined.Whatshot, null, tint = SuccessColor, modifier = Modifier.size(16.dp))
@@ -849,13 +922,15 @@ fun DashboardClean(
         val lastWorkout = workoutsList.filter { it.status == "completed" }.maxByOrNull { it.date }
         if (lastWorkout != null) {
             val sdf = SimpleDateFormat("MMM dd", Locale.US)
-            Text("RECENT PERFORMANCE", style = IronTypography.Caption.copy(color = TextTertiaryColor, letterSpacing = 2.sp), modifier = Modifier.padding(bottom = 12.dp, start = 4.dp))
-            Row(modifier = Modifier.fillMaxWidth().glassRecipe(RoundedCornerShape(IronCorner.RadiusMd)).padding(IronSpacing.x16), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Column {
-                    Text(lastWorkout.templateName ?: "UNTITLED SESSION", style = IronTypography.Headline, maxLines = 1)
-                    Text(sdf.format(Date(lastWorkout.date)).uppercase(), style = IronTypography.Micro.copy(color = TextSecondaryColor))
+            Column(modifier = Modifier.staggeredEntry(4)) {
+                Text("RECENT PERFORMANCE", style = IronTypography.Caption.copy(color = TextTertiaryColor, letterSpacing = 2.sp), modifier = Modifier.padding(bottom = 12.dp, start = 4.dp))
+                Row(modifier = Modifier.fillMaxWidth().glassRecipe(RoundedCornerShape(IronCorner.RadiusMd)).padding(IronSpacing.x16), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Column {
+                        Text(lastWorkout.templateName ?: "UNTITLED SESSION", style = IronTypography.Headline, maxLines = 1)
+                        Text(sdf.format(Date(lastWorkout.date)).uppercase(), style = IronTypography.Micro.copy(color = TextSecondaryColor))
+                    }
+                    Text("${lastWorkout.totalVolume.toInt()} KG", style = IronTypography.Subheading.copy(fontWeight = FontWeight.Black))
                 }
-                Text("${lastWorkout.totalVolume.toInt()} KG", style = IronTypography.Subheading.copy(fontWeight = FontWeight.Black))
             }
         }
 
